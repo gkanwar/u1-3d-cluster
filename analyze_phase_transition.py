@@ -22,6 +22,7 @@ def load_sweep(sweep):
         trace_M2 = []
         trace_MC = []
         trace_MC2 = []
+        trace_MCsus = []
         trace_E = []
         for e2 in e2s:
             fname = f'raw_obs/obs_trace_{e2:0.2f}_L{L}_mixed.npy'
@@ -38,17 +39,22 @@ def load_sweep(sweep):
             M2 = al.bootstrap(do_bin(d['M']**2), Nboot=1000, f=al.rmean)
             MC = al.bootstrap(do_bin(d['MC']), Nboot=1000, f=al.rmean)
             MC2 = al.bootstrap(do_bin(d['MC']**2), Nboot=1000, f=al.rmean)
+            MCsus = al.bootstrap(
+                d['MC'], Nboot=1000,
+                f=lambda MC: al.rmean(MC**2) - al.rmean(np.abs(MC))**2)
             E = al.bootstrap(do_bin(d['E']), Nboot=1000, f=al.rmean)
             trace_M.append(M)
             trace_M2.append(M2)
             trace_MC.append(MC)
             trace_MC2.append(MC2)
+            trace_MCsus.append(MCsus)
             trace_E.append(E)
         trace_e2s = np.array(trace_e2s)
         trace_M = np.transpose(trace_M)
         trace_M2 = np.transpose(trace_M2)
         trace_MC = np.transpose(trace_MC)
         trace_MC2 = np.transpose(trace_MC2)
+        trace_MCsus = np.transpose(trace_MCsus)
         trace_E = np.transpose(trace_E)
         all_traces.append({
             'e2': trace_e2s,
@@ -56,6 +62,7 @@ def load_sweep(sweep):
             'M2': trace_M2,
             'MC': trace_MC,
             'MC2': trace_MC2,
+            'MCsus': trace_MCsus,
             'E': trace_E
         })
     return all_traces
@@ -80,6 +87,7 @@ def plot_results():
         al.add_errorbar(trace['MC'], ax=axes[0,1], **style)
         al.add_errorbar(trace['MC2'] / V, ax=axes[1,1], **style)
         al.add_errorbar(trace['MC2'] / V**2, ax=axes[2,1], **style)
+        al.add_errorbar(trace['MCsus'] / V, ax=axes[1,2], **style)
         al.add_errorbar(trace['E'] / V, ax=axes[0,2], **style)
     for ax in axes[2]:
         ax.set_xlabel(r'$e^2$')
@@ -95,6 +103,7 @@ def plot_results():
     axes[2,1].set_ylabel(r'$\left<M_C^2\right> / V^2$')
     axes[2,0].set_yscale('log')
     axes[2,1].set_yscale('log')
+    axes[1,2].set_ylabel(r'$\frac{1}{V}(\left<M_C^2\right> - \left<|M_C|\right>^2)$')
 
     handles, labels = axes[0,0].get_legend_handles_labels()
     axes[2,2].legend(handles, labels)

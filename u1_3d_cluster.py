@@ -21,9 +21,9 @@ from u1_lib import *
 def sample_bonds(cfg, *, e2, h_star):
     assert len(cfg.shape) == 3, 'specialized for 3d'
     bonds = []
+    hx = cfg / 2
     for i in range(3):
-        hx = cfg / 2
-        hy = np.roll(cfg, -1, axis=i) / 2
+        hy = np.roll(hx, -1, axis=i)
         R = np.exp(-2*e2*(h_star - hx)*(h_star - hy))
         p_bond = 1 - np.minimum(1, R)
         assert p_bond.shape == cfg.shape

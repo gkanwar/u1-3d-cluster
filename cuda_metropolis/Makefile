@@ -27,4 +27,4 @@ u1_3d_cuda: main.o metropolis.o
 	$(NVCC) $(ALL_LDFLAGS) -o $@ $+ $(LIBRARIES)
 
 clean:
-	rm -f u1_3d_cluster main.o metropolis.o
+	rm -f u1_3d_cuda main.o metropolis.o

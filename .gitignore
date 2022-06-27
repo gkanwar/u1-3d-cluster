@@ -5,5 +5,8 @@
 !*.cu
 !*.cpp
 !*.sh
+!*.h
+!*.md
+!Makefile
 !cuda_metropolis
 !cluster

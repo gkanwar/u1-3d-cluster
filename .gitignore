@@ -10,3 +10,4 @@
 !Makefile
 !cuda_metropolis
 !cluster
+!cpp_cluster

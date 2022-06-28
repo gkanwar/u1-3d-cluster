@@ -4,14 +4,30 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <iostream>
+#include <fstream>
 #include <random>
 #include <vector>
+
 #include "cluster.h"
+#include "lattice.h"
+#include "measurements.h"
+#include "args.hxx"
 
 constexpr int SHIFT_FREQ = 100;
 
 using namespace std;
+using namespace std::chrono;
+constexpr double BIL = 1000000000;
+
+double sum_array(const double* arr, unsigned n) {
+  double tot = 0.0;
+  for (int j = 0; j < n; ++j) {
+    tot += arr[j];
+  }
+  return tot;
+}
 
 vector<int> make_init_cfg(const latt_shape* shape) {
   vector<int> cfg(shape->vol);
@@ -32,61 +48,112 @@ void rezero_cfg(vector<int>& cfg) {
   }
 }
 
-void run_cluster(double e2, int n_iter, minstd_rand& rng, const latt_shape* shape) {
-  vector<int> cfg = make_init_cfg(shape);
+void run_cluster(
+    double e2, int n_iter, int n_therm, int n_skip_meas, my_rand& rng,
+    const latt_shape* shape, vector<double> &E_hist,
+    vector<double> &M_hist, vector<double> &MC_hist) {
 
-  // internal cluster storage
-  vector<int> bonds(shape->vol*ND);
-  vector<int> labels(shape->vol);
+  vector<int> cfg = make_init_cfg(shape);
 
   uniform_int_distribution<int> site_dist =
       uniform_int_distribution<int>(0, shape->vol);
 
-  for (int i = 0; i < n_iter; ++i) {
-    const int site = site_dist(rng);
+  for (int i = -n_therm; i < n_iter; ++i) {
+    // cluster update
+    const int site = site_dist(rng); // rng() % shape->vol
     const int cfg_star = cfg[site];
-    const double h_star = cfg_star / 2.0;
-    sample_bonds(cfg.data(), bonds.data(), e2, h_star, rng, shape);
-    std::fill(labels.begin(), labels.end(), 0);
-    flip_clusters(bonds.data(), cfg.data(), labels.data(), cfg_star, rng, shape);
+    auto _start = steady_clock::now();
+    flip_clusters(cfg.data(), cfg_star, e2, rng, shape);
+    cout << "TIME flip_clusters "
+         << (steady_clock::now() - _start).count() / BIL << "\n";
 
+    // re-zero cfg periodically
     if ((i+1) % SHIFT_FREQ == 0) {
-      cout << (i+1) << " / " << n_iter << "\n";
       rezero_cfg(cfg);
     }
 
-    /// TODO: measurements
-
-    /// DEBUG
-    // for (int i = 0; i < shape->dims[1]; ++i) {
-    //   for (int j = 0; j < shape->dims[2]; ++j) {
-    //     cout << labels[i*shape->strides[1] + j] << " ";
-    //   }
-    //   cout << "\n";
-    // }
-    // cout << "\n";
-    // for (int i = 0; i < shape->dims[1]; ++i) {
-    //   for (int j = 0; j < shape->dims[2]; ++j) {
-    //     cout << cfg[i*shape->strides[1] + j] << " ";
-    //   }
-    //   cout << "\n";
-    // }
-    // cout << "\n";
+    // measurements
+    if (i >= 0 && (i+1) % n_skip_meas == 0) {
+      cout << (i+1) << " / " << n_iter << "\n";
+      double E = measure_E(cfg.data(), shape);
+      double M = measure_M(cfg.data(), shape);
+      double MC = measure_MC(cfg.data(), shape);
+      int meas_ind = ((i+1) / n_skip_meas) - 1;
+      E_hist[meas_ind] = E;
+      M_hist[meas_ind] = M;
+      MC_hist[meas_ind] = MC;
+    }
     
   }
 
 }
 
+void write_array_to_file(const vector<double>& arr, ostream &os) {
+  for (double val : arr) {
+    os.write(reinterpret_cast<char*>(&val), sizeof(val));
+  }
+}
+
+
 int main(int argc, char** argv) {
-  const double e2 = 0.5;
-  const int seed = 1234;
-  const int L = 32;
+  args::ArgumentParser parser("U(1) cluster in C++");
+  args::ValueFlag<int> flag_n_iter(
+      parser, "n_iter", "Number of MC iters", {"n_iter"}, args::Options::Required);
+  args::ValueFlag<int> flag_n_therm(
+      parser, "n_therm", "Number of thermalization iters", {"n_therm"}, args::Options::Required);
+  args::ValueFlag<int> flag_n_skip_meas(
+      parser, "n_skip_meas", "Number of iters between measurements", {"n_skip_meas"}, args::Options::Required);
+  args::ValueFlag<int> flag_seed(parser, "seed", "RNG seed", {"seed"}, args::Options::Required);
+  args::ValueFlag<double> flag_e2(parser, "e2", "Coupling squared", {"e2"}, args::Options::Required);
+  args::ValueFlag<int> flag_L(parser, "L", "Lattice side length", {"L"}, args::Options::Required);
+  args::ValueFlag<string> flag_out_prefix(parser, "out_prefix", "Output file prefix", {"out_prefix"}, args::Options::Required);
+
+  try {
+    parser.ParseCLI(argc, argv);
+  }
+  catch (args::Help) {
+    cout << parser;
+    return 0;
+  }
+  catch (args::ParseError e) {
+    cerr << e.what() << "\n";
+    cerr << parser;
+    return 1;
+  }
+  catch (args::ValidationError e) {
+    cerr << e.what() << "\n";
+    cerr << parser;
+    return 1;
+  }
+
+  const int L = args::get(flag_L);
+  const double e2 = args::get(flag_e2);
+  const int n_iter = args::get(flag_n_iter);
+  const int n_therm = args::get(flag_n_therm);
+  const int n_skip_meas = args::get(flag_n_skip_meas);
+  const unsigned long seed = args::get(flag_seed);
+  const string out_prefix = args::get(flag_out_prefix);
+
   array<int,3> dims = { L, L, L };
   latt_shape shape = make_latt_shape(&dims.front());
 
-  minstd_rand rng(1235);
+  my_rand rng(seed);
 
-  run_cluster(e2, 1000, rng, &shape);
+  vector<double> E_hist(n_iter / n_skip_meas);
+  vector<double> M_hist(n_iter / n_skip_meas);
+  vector<double> MC_hist(n_iter / n_skip_meas);
+  run_cluster(e2, n_iter, n_therm, n_skip_meas, rng, &shape,
+              E_hist, M_hist, MC_hist);
+
+  double E = sum_array(E_hist.data(), E_hist.size()) / E_hist.size();
+  cout << "Mean E/V = " << (E/shape.vol) << "\n";
+  double MC = sum_array(MC_hist.data(), MC_hist.size()) / MC_hist.size();
+  cout << "Mean MC = " << MC << "\n";
+
+  ofstream f1(out_prefix + "_E.dat", ios::binary);
+  write_array_to_file(E_hist, f1);
+  ofstream f2(out_prefix + "_MC.dat", ios::binary);
+  write_array_to_file(MC_hist, f2);
 
   return 0;
 }

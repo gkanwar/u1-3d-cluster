@@ -1,12 +1,12 @@
 all: build
 
-CCFLAGS := -O3 -DNDEBUG
+CCFLAGS := -Ofast -DNDEBUG -flto
 
 build: u1_3d_cluster
 
-main.o: main.cpp cluster.h
+main.o: main.cpp cluster.h lattice.h measurements.h args.hxx
 	g++ $(CCFLAGS) -o $@ -c $<
-cluster.o: cluster.cpp cluster.h
+cluster.o: cluster.cpp cluster.h lattice.h measurements.h
 	g++ $(CCFLAGS) -o $@ -c $<
 u1_3d_cluster: main.o cluster.o
 	g++ $(CCFLAGS) -o $@ $+

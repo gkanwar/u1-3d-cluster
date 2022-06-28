@@ -393,9 +393,10 @@ def run_histogram_sweep(rank):
     np.save(f'raw_obs/obs_{e2:0.2f}_L{L}_mixed.npy', res_clust['Os'])
 
 def run_trace_sweep(rank):
-    # all_Ls = np.array([8, 16, 32, 48, 64, 80], dtype=int)
-    all_Ls = np.array([96, 128], dtype=int)
-    all_e2s = np.arange(0.30, 1.80+1e-6, 0.05)
+    # all_Ls = np.array([8, 16, 32, 48, 64, 80, 96, 128], dtype=int)
+    all_Ls = np.array([256], dtype=int)
+    # all_e2s = np.arange(0.30, 1.80+1e-6, 0.05)
+    all_e2s = np.arange(0.30, 0.45+1e-6, 0.05)
     all_Ls, all_e2s = np.meshgrid(all_Ls, all_e2s, indexing='ij')
     all_Ls = all_Ls.flatten()
     all_e2s = all_e2s.flatten()

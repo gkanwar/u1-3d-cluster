@@ -5,11 +5,11 @@ import os
 import paper_plt
 paper_plt.load_latex_config()
 
-fig, axes = plt.subplots(2,3, figsize=(6,4))
+fig, axes = plt.subplots(2,3, figsize=(8,6))
 style = dict(marker='*', fillstyle='none', markersize=6)
 
 all_e2s = np.arange(0.30, 1.25+1e-6, 0.05)
-for L in [16, 32, 48, 64]:
+for L in [16, 32, 48, 64, 80, 96, 128]:
     V = L**3
 
     e2s = []
@@ -40,12 +40,16 @@ for L in [16, 32, 48, 64]:
     MC2ps = np.transpose(MC2ps)
     MCsus = np.transpose(MCsus)
 
-    al.add_errorbar(Es, xs=e2s, ax=axes[0,0], **style)
+    al.add_errorbar(Es, xs=e2s, ax=axes[0,0], **style, label=rf'$L={L}$')
     al.add_errorbar(MCs, xs=e2s, ax=axes[0,1], **style)
     al.add_errorbar(MC2s, xs=e2s, ax=axes[1,0], **style)
+    axes[1,0].set_yscale('log')
     al.add_errorbar(MC2ps, xs=e2s, ax=axes[1,1], **style)
+    axes[1,1].set_yscale('log')
     al.add_errorbar(MCsus, xs=e2s, ax=axes[1,2], **style)
 
+handles, labels = axes[0,0].get_legend_handles_labels()
+axes[0,2].legend(handles, labels)
 fig.set_tight_layout(True)
 
 fig, ax = plt.subplots(1,1)

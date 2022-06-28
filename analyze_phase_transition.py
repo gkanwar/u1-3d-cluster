@@ -6,6 +6,8 @@ import analysis as al
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
+import scipy as sp
+import scipy.optimize
 import os
 import paper_plt
 paper_plt.load_latex_config()
@@ -14,7 +16,7 @@ paper_plt.load_latex_config()
 def load_sweep(sweep):
     Ls, e2s = sweep
     all_traces = []
-    do_bin = lambda x: al.bin_data(x, binsize=100)[1]
+    do_bin = lambda x: al.bin_data(x, binsize=20)[1]
     for L in Ls:
         V = L**3
         trace_e2s = []
@@ -34,6 +36,7 @@ def load_sweep(sweep):
             if d['version'] < 5:
                 print(f'Skipping {fname} (old version)')
                 continue
+            print(f'... loaded timeseries with {len(d["M"])} pts')
             trace_e2s.append(e2)
             M = al.bootstrap(do_bin(d['M']), Nboot=1000, f=al.rmean)
             M2 = al.bootstrap(do_bin(d['M']**2), Nboot=1000, f=al.rmean)
@@ -67,13 +70,34 @@ def load_sweep(sweep):
         })
     return all_traces
 
+def fit_mc2_curve(e2s, MC2_means, MC2_errs, *, err_rescale=1.0):
+    print(e2s)
+    print(MC2_means)
+    print(MC2_errs)
+    MC2_errs *= err_rescale
+    f = lambda e2, A, B: A*np.exp(-B/e2)
+    popt, pcov = sp.optimize.curve_fit(
+        f, e2s, MC2_means, sigma=MC2_errs, bounds=[[0.0, 0.0], [np.inf, np.inf]])
+    f_opt = lambda e2: f(e2, *popt)
+    resid = MC2_means - f_opt(e2s)
+    chisq = np.sum(resid**2 / MC2_errs**2)
+    chisq_per_dof = chisq / (len(e2s) - len(popt))
+    print(f'fit params = {popt}')
+    print(f'fit {chisq_per_dof=}')
+    return {
+        'f': f_opt,
+        'params': popt,
+        'chisq': chisq,
+        'chisq_per_dof': chisq_per_dof
+    }
+
 def plot_results():
     sweep1 = (
-        np.array([8, 16, 32, 48, 64, 80], dtype=int),
+        np.array([8, 16, 32, 48, 64, 80, 96, 128], dtype=int),
         np.arange(0.30, 1.80+1e-6,  0.05),
     )
-    colors1 = ['xkcd:pink', 'xkcd:green', 'xkcd:blue', 'xkcd:gray', 'k', 'xkcd:red']
-    markers1 = ['o', 's', '^', 'x', 'v', '*']
+    colors1 = ['xkcd:pink', 'xkcd:green', 'xkcd:blue', 'xkcd:gray', 'k', 'xkcd:red', 'xkcd:purple', 'xkcd:forest green']
+    markers1 = ['o', 's', '^', 'x', 'v', '*', '.', 'p']
     
     traces1 = load_sweep(sweep1)
     fig, axes = plt.subplots(3,3, figsize=(10,6))
@@ -89,6 +113,14 @@ def plot_results():
         al.add_errorbar(trace['MC2'] / V**2, ax=axes[2,1], **style)
         al.add_errorbar(trace['MCsus'] / V, ax=axes[1,2], **style)
         al.add_errorbar(trace['E'] / V, ax=axes[0,2], **style)
+
+        if L == 128:
+            ti, tf = 4, 20
+            res = fit_mc2_curve(
+                trace['e2'][ti:tf], *(trace['MC2'][:,ti:tf] / V**2), err_rescale=5.0)
+            fit_e2s = np.linspace(np.min(trace['e2']), np.max(trace['e2']), num=100)
+            fit_fs = res['f'](fit_e2s)
+            axes[2,1].plot(fit_e2s, fit_fs, linewidth=3, linestyle='--', color='b')
     for ax in axes[2]:
         ax.set_xlabel(r'$e^2$')
     axes[0,0].set_ylabel(r'$\left<M\right>$')

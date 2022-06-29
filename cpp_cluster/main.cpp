@@ -147,13 +147,17 @@ int main(int argc, char** argv) {
 
   double E = sum_array(E_hist.data(), E_hist.size()) / E_hist.size();
   cout << "Mean E/V = " << (E/shape.vol) << "\n";
+  double M = sum_array(M_hist.data(), M_hist.size()) / M_hist.size();
+  cout << "Mean M = " << M << "\n";
   double MC = sum_array(MC_hist.data(), MC_hist.size()) / MC_hist.size();
   cout << "Mean MC = " << MC << "\n";
 
   ofstream f1(out_prefix + "_E.dat", ios::binary);
   write_array_to_file(E_hist, f1);
-  ofstream f2(out_prefix + "_MC.dat", ios::binary);
-  write_array_to_file(MC_hist, f2);
+  ofstream f2(out_prefix + "_M.dat", ios::binary);
+  write_array_to_file(M_hist, f2);
+  ofstream f3(out_prefix + "_MC.dat", ios::binary);
+  write_array_to_file(MC_hist, f3);
 
   return 0;
 }

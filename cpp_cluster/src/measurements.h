@@ -1,6 +1,7 @@
 #ifndef MEASUREMENTS_H
 #define MEASUREMENTS_H
 
+#include <vector>
 #include "lattice.h"
 
 inline double sq(double x) {
@@ -32,6 +33,53 @@ inline double measure_M(const int* cfg, const latt_shape* shape) {
     M += parity * hx;
   }
   return M;
+}
+
+inline double measure_MT(const int* cfg, const latt_shape* shape) {
+  double h_bar = 0;
+  for (int x = 0; x < shape->vol; ++x) {
+    const double hx = cfg[x] / 2.0;
+    h_bar += hx / shape->vol;
+  }
+  double MT = 0;
+  for (int x = 0; x < shape->vol; ++x) {
+    int tot_coord = 0;
+    for (int i = 0; i < ND; ++i) {
+      tot_coord += compute_comp(x, i, shape);
+    }
+    const int parity = 1 - 2*(tot_coord % 2);
+    const double hx = cfg[x] / 2.0;
+    MT += parity * sq(hx - h_bar);
+  }
+  return MT;
+}
+
+inline std::vector<double> measure_Cl(const int* cfg, const latt_shape* shape) {
+  std::vector<double> Cl(shape->dims[ND-1]);
+  const int mu = ND-1;
+  for (int x = 0; x < shape->vol; ++x) {
+    const int x_mu = shift_site_idx(x, 1, mu, shape);
+    const double lx_mu = (cfg[x_mu] - cfg[x]) / 2.0;
+    for (int dt = 0; dt < Cl.size(); ++dt) {
+      const int y = shift_site_idx(x, dt, ND-1, shape);
+      const int y_mu = shift_site_idx(y, 1, mu, shape);
+      const double ly_mu = (cfg[y_mu] - cfg[y]) / 2.0;
+      Cl[dt] += (lx_mu * ly_mu) / shape->vol;
+    }
+  }
+  return Cl;
+}
+
+inline std::vector<double> measure_Cl_mom(const int* cfg, const latt_shape* shape) {
+  std::vector<double> Cl_mom(shape->dims[ND-1]);
+  const int mu = 0;
+  for (int x = 0; x < shape->vol; ++x) {
+    const int x_mu = shift_site_idx(x, 1, mu, shape);
+    const double lx_mu = (cfg[x_mu] - cfg[x]) / 2.0;
+    const int t = compute_comp(x, ND-1, shape);
+    Cl_mom[t] += lx_mu;
+  }
+  return Cl_mom;
 }
 
 inline double compute_Ox(const int* cfg, int x, const latt_shape* shape) {

@@ -49,9 +49,11 @@ void rezero_cfg(vector<int>& cfg) {
 }
 
 void run_cluster(
-    double e2, int n_iter, int n_therm, int n_skip_meas, my_rand& rng,
-    const latt_shape* shape, vector<double> &E_hist,
-    vector<double> &M_hist, vector<double> &MC_hist) {
+    double e2, int n_iter, int n_therm, int n_skip_meas,
+    my_rand& rng, const latt_shape* shape,
+    vector<double> &E_hist, vector<double> &M_hist,
+    vector<double> &MT_hist, vector<double> &MC_hist,
+    vector<double> &Cl_hist, vector<double> &Cl_mom_hist) {
 
   vector<int> cfg = make_init_cfg(shape);
 
@@ -77,11 +79,23 @@ void run_cluster(
       cout << (i+1) << " / " << n_iter << "\n";
       double E = measure_E(cfg.data(), shape);
       double M = measure_M(cfg.data(), shape);
+      double MT = measure_MT(cfg.data(), shape);
       double MC = measure_MC(cfg.data(), shape);
+      vector<double> Cl = measure_Cl(cfg.data(), shape);
+      vector<double> Cl_mom = measure_Cl_mom(cfg.data(), shape);
       int meas_ind = ((i+1) / n_skip_meas) - 1;
       E_hist[meas_ind] = E;
       M_hist[meas_ind] = M;
+      MT_hist[meas_ind] = MT;
       MC_hist[meas_ind] = MC;
+      assert(Cl_hist.size() >= meas_ind*Cl.size());
+      std::copy(
+          Cl.begin(), Cl.end(),
+          Cl_hist.begin() + meas_ind*Cl.size());
+      assert(Cl_mom_hist.size() >= meas_ind*Cl_mom.size());
+      std::copy(
+          Cl_mom.begin(), Cl_mom.end(),
+          Cl_mom_hist.begin() + meas_ind*Cl_mom.size());
     }
     
   }
@@ -141,23 +155,46 @@ int main(int argc, char** argv) {
 
   vector<double> E_hist(n_iter / n_skip_meas);
   vector<double> M_hist(n_iter / n_skip_meas);
+  vector<double> MT_hist(n_iter / n_skip_meas);
   vector<double> MC_hist(n_iter / n_skip_meas);
+  vector<double> Cl_hist(L * n_iter / n_skip_meas);
+  vector<double> Cl_mom_hist(L * n_iter / n_skip_meas);
   run_cluster(e2, n_iter, n_therm, n_skip_meas, rng, &shape,
-              E_hist, M_hist, MC_hist);
+              E_hist, M_hist, MT_hist, MC_hist, Cl_hist, Cl_mom_hist);
 
   double E = sum_array(E_hist.data(), E_hist.size()) / E_hist.size();
   cout << "Mean E/V = " << (E/shape.vol) << "\n";
   double M = sum_array(M_hist.data(), M_hist.size()) / M_hist.size();
   cout << "Mean M = " << M << "\n";
+  double MT = sum_array(MT_hist.data(), MT_hist.size()) / MT_hist.size();
+  cout << "Mean MT = " << MT << "\n";
   double MC = sum_array(MC_hist.data(), MC_hist.size()) / MC_hist.size();
   cout << "Mean MC = " << MC << "\n";
 
-  ofstream f1(out_prefix + "_E.dat", ios::binary);
-  write_array_to_file(E_hist, f1);
-  ofstream f2(out_prefix + "_M.dat", ios::binary);
-  write_array_to_file(M_hist, f2);
-  ofstream f3(out_prefix + "_MC.dat", ios::binary);
-  write_array_to_file(MC_hist, f3);
+  {
+    ofstream f(out_prefix + "_E.dat", ios::binary);
+    write_array_to_file(E_hist, f);
+  }
+  {
+    ofstream f(out_prefix + "_M.dat", ios::binary);
+    write_array_to_file(M_hist, f);
+  }
+  {
+    ofstream f(out_prefix + "_MT.dat", ios::binary);
+    write_array_to_file(MT_hist, f);
+  }
+  {
+    ofstream f(out_prefix + "_MC.dat", ios::binary);
+    write_array_to_file(MC_hist, f);
+  }
+  {
+    ofstream f(out_prefix + "_Cl.dat", ios::binary);
+    write_array_to_file(Cl_hist, f);
+  }
+  {
+    ofstream f(out_prefix + "_Cl_mom.dat", ios::binary);
+    write_array_to_file(Cl_mom_hist, f);
+  }
 
   return 0;
 }

@@ -7,7 +7,9 @@
 !*.sh
 !*.h
 !*.md
+!*.txt
 !Makefile
 !cuda_metropolis
 !cluster
 !cpp_cluster
+!aditya

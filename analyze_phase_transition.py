@@ -46,8 +46,10 @@ def load_sweep(sweep, *, kind):
                 print(f'Loading prefix {prefix}...')
                 d = {}
                 d['E'] = np.fromfile(prefix + '_E.dat')
-                ### FORNOW
-                d['M'] = np.zeros_like(d['E']) # np.fromfile(prefix + '_M.dat')
+                if os.path.exists(prefix + '_M.dat'):
+                    d['M'] = np.fromfile(prefix + '_M.dat')
+                else:
+                    d['M'] = np.zeros_like(d['E'])
                 d['MC'] = np.fromfile(prefix + '_MC.dat')
 
             else:

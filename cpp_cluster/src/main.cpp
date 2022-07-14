@@ -25,7 +25,7 @@ constexpr double BIL = 1000000000;
 
 double sum_array(const double* arr, unsigned n) {
   double tot = 0.0;
-  for (int j = 0; j < n; ++j) {
+  for (unsigned j = 0; j < n; ++j) {
     tot += arr[j];
   }
   return tot;
@@ -45,7 +45,7 @@ vector<int> make_init_cfg(const latt_shape* shape) {
 
 void rezero_cfg(vector<int>& cfg) {
   int x = cfg[0];
-  for (int i = 0; i < cfg.size(); ++i) {
+  for (unsigned i = 0; i < cfg.size(); ++i) {
     cfg[i] -= x;
   }
 }
@@ -55,7 +55,7 @@ void run_cluster(
     my_rand& rng, const latt_shape* shape,
     vector<double> &E_hist, vector<double> &M_hist,
     vector<double> &MT_hist, vector<double> &MC_hist,
-    vector<double> &hsq_hist, vector<double> &Cl_hist,
+    vector<double> &hsq_hist, [[maybe_unused]] vector<double> &Cl_hist,
     vector<cdouble> &Ch_mom_hist, vector<cdouble> &Ch_mom1_hist) {
 
   vector<int> cfg = make_init_cfg(shape);
@@ -144,16 +144,16 @@ int main(int argc, char** argv) {
   try {
     parser.ParseCLI(argc, argv);
   }
-  catch (args::Help) {
+  catch (args::Help&) {
     cout << parser;
     return 0;
   }
-  catch (args::ParseError e) {
+  catch (args::ParseError& e) {
     cerr << e.what() << "\n";
     cerr << parser;
     return 1;
   }
-  catch (args::ValidationError e) {
+  catch (args::ValidationError& e) {
     cerr << e.what() << "\n";
     cerr << parser;
     return 1;

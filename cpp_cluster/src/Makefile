@@ -21,15 +21,15 @@ GTEST_CCFLAGS := -std=c++17 -g -Wall -Wextra -pthread -isystem $(GTEST_DIR)/incl
 GTEST_HEADERS = $(GTEST_DIR)/include/gtest/*.h \
 		$(GTEST_DIR)/include/gtest/internal/*.h
 GTEST_SRCS_ = $(GTEST_DIR)/src/*.cc $(GTEST_DIR)/src/*.h $(GTEST_HEADERS)
-$(GTEST_BUILD_DIR) :
-	mkdir -p $(GTEST_BUILD_DIR)
-$(GTEST_BUILD_DIR)/gtest-all.o : $(GTEST_SRCS_) $(GTEST_BUILD_DIR)
+$(GTEST_BUILD_DIR)/.dirstamp :
+	mkdir -p $(GTEST_BUILD_DIR) && touch $@
+$(GTEST_BUILD_DIR)/gtest-all.o : $(GTEST_SRCS_) $(GTEST_BUILD_DIR)/.dirstamp
 	$(CXX) $(GTEST_CCFLAGS) -I$(GTEST_DIR) -c \
-            $(GTEST_DIR)/src/gtest-all.cc -o $(GTEST_BUILD_DIR)/gtest-all.o
+            $(GTEST_DIR)/src/gtest-all.cc -o $@
 
-$(GTEST_BUILD_DIR)/gtest_main.o : $(GTEST_SRCS_) $(GTEST_BUILD_DIR)
+$(GTEST_BUILD_DIR)/gtest_main.o : $(GTEST_SRCS_) $(GTEST_BUILD_DIR)/.dirstamp
 	$(CXX) $(GTEST_CCFLAGS) -I$(GTEST_DIR) -c \
-            $(GTEST_DIR)/src/gtest_main.cc -o $(GTEST_BUILD_DIR)/gtest_main.o
+            $(GTEST_DIR)/src/gtest_main.cc -o $@
 
 $(GTEST_BUILD_DIR)/gtest.a : $(GTEST_BUILD_DIR)/gtest-all.o
 	$(AR) $(ARFLAGS) $@ $^

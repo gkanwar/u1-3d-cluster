@@ -16,29 +16,33 @@ u1_3d_cluster: main.o cluster.o
 	$(CXX) $(CCFLAGS) -o $@ $^
 
 GTEST_DIR := gtest/googletest
+GTEST_BUILD_DIR := gtest_build
 GTEST_CCFLAGS := -std=c++17 -g -Wall -Wextra -pthread -isystem $(GTEST_DIR)/include
 GTEST_HEADERS = $(GTEST_DIR)/include/gtest/*.h \
 		$(GTEST_DIR)/include/gtest/internal/*.h
 GTEST_SRCS_ = $(GTEST_DIR)/src/*.cc $(GTEST_DIR)/src/*.h $(GTEST_HEADERS)
-$(GTEST_DIR)/gtest-all.o : $(GTEST_SRCS_)
+$(GTEST_BUILD_DIR) :
+	mkdir -p $(GTEST_BUILD_DIR)
+$(GTEST_BUILD_DIR)/gtest-all.o : $(GTEST_SRCS_) $(GTEST_BUILD_DIR)
 	$(CXX) $(GTEST_CCFLAGS) -I$(GTEST_DIR) -c \
-            $(GTEST_DIR)/src/gtest-all.cc -o $(GTEST_DIR)/gtest-all.o
+            $(GTEST_DIR)/src/gtest-all.cc -o $(GTEST_BUILD_DIR)/gtest-all.o
 
-$(GTEST_DIR)/gtest_main.o : $(GTEST_SRCS_)
+$(GTEST_BUILD_DIR)/gtest_main.o : $(GTEST_SRCS_) $(GTEST_BUILD_DIR)
 	$(CXX) $(GTEST_CCFLAGS) -I$(GTEST_DIR) -c \
-            $(GTEST_DIR)/src/gtest_main.cc -o $(GTEST_DIR)/gtest_main.o
+            $(GTEST_DIR)/src/gtest_main.cc -o $(GTEST_BUILD_DIR)/gtest_main.o
 
-$(GTEST_DIR)/gtest.a : $(GTEST_DIR)/gtest-all.o
+$(GTEST_BUILD_DIR)/gtest.a : $(GTEST_BUILD_DIR)/gtest-all.o
 	$(AR) $(ARFLAGS) $@ $^
 
-$(GTEST_DIR)/gtest_main.a : $(GTEST_DIR)/gtest-all.o $(GTEST_DIR)/gtest_main.o
+$(GTEST_BUILD_DIR)/gtest_main.a : $(GTEST_BUILD_DIR)/gtest-all.o $(GTEST_BUILD_DIR)/gtest_main.o
 	$(AR) $(ARFLAGS) $@ $^
 
 tests.o: tests.cpp $(MY_HEADERS) $(GTEST_HEADERS)
 	$(CXX) $(GTEST_CCFLAGS) -o $@ -c $<
 
-tests: tests.o cluster.o $(GTEST_DIR)/gtest_main.a
+tests: tests.o cluster.o $(GTEST_BUILD_DIR)/gtest_main.a
 	$(CXX) $(GTEST_CCFLAGS) -lpthread $^ -o $@
 
 clean:
 	rm -f u1_3d_cluster tests main.o cluster.o tests.o
+	rm -rf $(GTEST_BUILD_DIR)

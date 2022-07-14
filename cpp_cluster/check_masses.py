@@ -71,13 +71,16 @@ def load_and_fit_momproj(fname, L, ax, style):
     Cl_boots = list(map(lambda Cl: al.rmean(Cl[0]), al.bootstrap_gen(Cl, Nboot=1000)))
     Cl_covar = al.covar_from_boots(Cl_boots)
     Cl_mean = np.mean(Cl_boots, axis=0)
+    print('Cl_mean', Cl_mean)
 
     f = lambda r,A,m: A*np.exp(-m*r)
     rmin, rmax = 4, 15
     all_rs = np.arange(Cl.shape[-1])
     rs = all_rs[rmin:rmax]
     ys = Cl_mean[rs]
-    covar = Cl_covar[np.ix_(rs, rs)]
+    covar = al.shrink_covar(Cl_covar[np.ix_(rs, rs)], lam=0.1)
+    _eigs = np.linalg.eigvals(covar)
+    print(np.min(_eigs), np.max(_eigs))
     popt, pcov = sp.optimize.curve_fit(
         f, rs, ys, sigma=covar,
         bounds=[[0.0, 0.0], [np.inf, np.inf]], maxfev=10000)
@@ -101,17 +104,17 @@ def load_and_fit_momproj(fname, L, ax, style):
             **style2)
     return popt[1]
 
-e2s = np.arange(0.30, 1.00+1e-6, 0.10)
+e2s = np.arange(0.40, 1.00+1e-6, 0.10)
 L = 64
 ms = []
 fig, ax = plt.subplots(1,1, figsize=(8,8))
 colors = ['xkcd:brick red', 'xkcd:purple', 'xkcd:blue', 'xkcd:forest green', 'xkcd:emerald green', 'xkcd:bright red', 'xkcd:orange', 'xkcd:pink']
 for e2,color in zip(e2s, colors):
     print(e2)
-    # m = load_and_fit(f'obs_trace_{e2:0.2f}_L{L}_cluster_Cl.dat', L, ax, dict(
+    # m = load_and_fit(f'raw_obs/obs_trace_{e2:0.2f}_L{L}_cluster_Cl.dat', L, ax, dict(
     #     label=f'{e2:0.2f}_L{L}', color=color
     # ))
-    m = load_and_fit_momproj(f'obs_trace_{e2:0.2f}_L{L}_cluster_Cl_mom.dat', L, ax, dict(
+    m = load_and_fit_momproj(f'raw_obs/obs_trace_{e2:0.2f}_L{L}_cluster_Cl_mom.dat', L, ax, dict(
         label=f'{e2:0.2f}_L{L}', color=color
     ))
     ms.append(m)

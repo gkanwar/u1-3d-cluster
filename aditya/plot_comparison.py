@@ -126,13 +126,13 @@ al.add_errorbar(4*tej_sweep['M2']/V**2, xs=e2s, ax=axes[0,0], **style2,
 al.add_errorbar(16*tej_sweep['MT2']/V**2, xs=e2s, ax=axes[0,1], **style2)
 al.add_errorbar(4*tej_sweep['E']/(3*V), xs=e2s, ax=axes[0,2], **style2)
 al.add_errorbar(16*tej_sweep['MC2']/V**2, xs=e2s, ax=axes[1,0], **style2)
-al.add_errorbar(4*tej_sweep['MC']/V**2, xs=e2s, ax=axes[1,1], **style2)
+al.add_errorbar(4*tej_sweep['MC']/V, xs=e2s, ax=axes[1,1], **style2)
 
 axes[0,2].set_ylabel(r'$\left< 4E/3V \right>$')
 axes[0,0].set_ylabel(r'$\left< 4 M^2 / V^2 \right>$')
 axes[0,1].set_ylabel(r'$\left< 16 M_T^2 / V^2 \right>$')
 axes[1,0].set_ylabel(r'$\left< 16 M_C^2 / V^2 \right>$')
-axes[1,1].set_ylabel(r'$\left< 4 M_C / V^2 \right>$')
+axes[1,1].set_ylabel(r'$\left< 4 M_C / V \right>$')
 
 axes[0,0].set_yscale('log')
 axes[0,1].set_yscale('log')

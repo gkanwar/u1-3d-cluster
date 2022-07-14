@@ -26,14 +26,22 @@ if [ -z "${n_skip_meas+x}" ]; then
     echo "Must set n_skip_meas"
     exit
 fi
-if [ -z "${seed+x}": ]; then
+if [ -z "${seed+x}" ]; then
     echo "Must set seed"
     exit
+fi
+
+if [ -z "${cper+x}" ]; then
+    CPER_FLAG=''
+    CPER_TAG=''
+else
+    CPER_FLAG='--cper'
+    CPER_TAG='_cper'
 fi
 
 
 cd /space4/kanwar/quantum_link/u1/cpp_cluster
 srun --ntasks-per-node=1 \
     ./src/u1_3d_cluster --n_iter=${n_iter} --n_therm=${n_therm} --n_skip_meas=${n_skip_meas} \
-    --seed=${seed} --e2=${e2} --L=${L} \
-    --out_prefix=raw_obs/obs_trace_${e2}_L${L}_cluster
+    --seed=${seed} --e2=${e2} --L=${L} ${CPER_FLAG} \
+    --out_prefix=raw_obs/obs_trace_${e2}_L${L}_cluster${CPER_TAG}

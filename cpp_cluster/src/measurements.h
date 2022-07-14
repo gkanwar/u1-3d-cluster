@@ -13,8 +13,8 @@ inline double measure_E(const int* cfg, const latt_shape* shape) {
   for (int x = 0; x < shape->vol; ++x) {
     const double hx = cfg[x] / 2.0;
     for (int i = 0; i < ND; ++i) {
-      const int x_fwd = shift_site_idx(x, 1, i, shape);
-      const double hy = cfg[x_fwd] / 2.0;
+      const auto [x_fwd, sx_fwd] = shift_site_idx(x, 1, i, shape);
+      const double hy = sx_fwd*cfg[x_fwd] / 2.0;
       E += sq(hx - hy);
     }
   }
@@ -54,50 +54,64 @@ inline double measure_MT(const int* cfg, const latt_shape* shape) {
   return MT;
 }
 
+inline double measure_hsq(const int* cfg, const latt_shape* shape) {
+  double hsq = 0.0;
+  for (int x = 0; x < shape->vol; ++x) {
+    const double hx = cfg[x] / 2.0;
+    hsq += sq(hx);
+  }
+  return hsq;
+}
+
+
 inline std::vector<double> measure_Cl(const int* cfg, const latt_shape* shape) {
   std::vector<double> Cl(shape->dims[ND-1]);
   const int mu = ND-1;
   for (int x = 0; x < shape->vol; ++x) {
-    const int x_mu = shift_site_idx(x, 1, mu, shape);
-    const double lx_mu = (cfg[x_mu] - cfg[x]) / 2.0;
-    for (int dt = 0; dt < Cl.size(); ++dt) {
-      const int y = shift_site_idx(x, dt, ND-1, shape);
-      const int y_mu = shift_site_idx(y, 1, mu, shape);
-      const double ly_mu = (cfg[y_mu] - cfg[y]) / 2.0;
+    const auto [x_mu, sx_mu] = shift_site_idx(x, 1, mu, shape);
+    const double lx_mu = (sx_mu*cfg[x_mu] - cfg[x]) / 2.0;
+    for (long unsigned dt = 0; dt < Cl.size(); ++dt) {
+      const auto [y, sy] = shift_site_idx(x, dt, ND-1, shape);
+      const auto [y_mu, sy_mu] = shift_site_idx(y, 1, mu, shape);
+      const double ly_mu = (sy_mu*sy*cfg[y_mu] - sy*cfg[y]) / 2.0;
       Cl[dt] += (lx_mu * ly_mu) / shape->vol;
     }
   }
   return Cl;
 }
 
-inline std::vector<double> measure_Cl_mom(const int* cfg, const latt_shape* shape) {
-  std::vector<double> Cl_mom(shape->dims[ND-1]);
-  const int mu = 0;
+inline std::vector<cdouble> measure_Ch_mom(
+    const int* cfg, const std::vector<double>& p,
+    const latt_shape* shape) {
+  assert(p.size() == ND-1);
+  std::vector<cdouble> Ch_mom(shape->dims[ND-1]);
   for (int x = 0; x < shape->vol; ++x) {
-    const int x_mu = shift_site_idx(x, 1, mu, shape);
-    const double lx_mu = (cfg[x_mu] - cfg[x]) / 2.0;
     const int t = compute_comp(x, ND-1, shape);
-    Cl_mom[t] += lx_mu;
+    double px = 0.0;
+    for (int i = 0; i < ND-1; ++i) {
+      px += compute_comp(x, i, shape) * p[i];
+    }
+    Ch_mom[t] += std::exp(1i * px) * (cfg[x] / 2.0);
   }
-  return Cl_mom;
+  return Ch_mom;
 }
 
 inline double compute_Ox(const int* cfg, int x, const latt_shape* shape) {
   const double h = cfg[x] / 2.0;
-  int x1 = shift_site_idx(x, 1, 0, shape);
-  int x2 = shift_site_idx(x, 1, 1, shape);
-  int x3 = shift_site_idx(x, 1, 2, shape);
-  const double h1 = cfg[x1] / 2.0;
-  const double h2 = cfg[x2] / 2.0;
-  const double h3 = cfg[x3] / 2.0;
-  int x12 = shift_site_idx(x1, 1, 1, shape);
-  int x23 = shift_site_idx(x2, 1, 2, shape);
-  int x13 = shift_site_idx(x1, 1, 2, shape);
-  const double h12 = cfg[x12] / 2.0;
-  const double h23 = cfg[x23] / 2.0;
-  const double h13 = cfg[x13] / 2.0;
-  int x123 = shift_site_idx(x12, 1, 2, shape);
-  const double h123 = cfg[x123] / 2.0;
+  const auto [x1, sx1] = shift_site_idx(x, 1, 0, shape);
+  const auto [x2, sx2] = shift_site_idx(x, 1, 1, shape);
+  const auto [x3, sx3] = shift_site_idx(x, 1, 2, shape);
+  const double h1 = sx1*cfg[x1] / 2.0;
+  const double h2 = sx2*cfg[x2] / 2.0;
+  const double h3 = sx3*cfg[x3] / 2.0;
+  const auto [x12, sx12] = shift_site_idx(x1, 1, 1, shape);
+  const auto [x23, sx23] = shift_site_idx(x2, 1, 2, shape);
+  const auto [x13, sx13] = shift_site_idx(x1, 1, 2, shape);
+  const double h12 = sx12*sx1*cfg[x12] / 2.0;
+  const double h23 = sx23*sx2*cfg[x23] / 2.0;
+  const double h13 = sx13*sx1*cfg[x13] / 2.0;
+  const auto [x123, sx123] = shift_site_idx(x12, 1, 2, shape);
+  const double h123 = sx123*sx12*sx1*cfg[x123] / 2.0;
   const double h_bar = (
       h + h1 + h2 + h3 + h12 + h23 + h13 + h123) / 8.0;
   return (

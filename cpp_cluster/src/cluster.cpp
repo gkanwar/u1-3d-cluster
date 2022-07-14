@@ -45,11 +45,11 @@ void flip_clusters(
       int y = queue.top();
       queue.pop();
       for (int i = 0; i < ND; ++i) {
-        int y_fwd = shift_site_idx(y, 1, i, shape);
-        int y_bwd = shift_site_idx(y, -1, i, shape);
+        const auto [y_fwd, sy_fwd] = shift_site_idx(y, 1, i, shape);
+        const auto [y_bwd, sy_bwd] = shift_site_idx(y, -1, i, shape);
         // lazy bonds:
         if (labels[y_fwd] == 0) {
-          bool bond_fwd = sample_bond(cfg[y], cfg[y_fwd], cfg_star, e2, rng);
+          bool bond_fwd = sample_bond(cfg[y], sy_fwd*cfg[y_fwd], cfg_star, e2, rng);
           // bool bond_fwd = bonds[get_bond_idx(y, i, shape)];
           if (bond_fwd) {
             flips[y_fwd] = cur_flip;
@@ -58,7 +58,7 @@ void flip_clusters(
           }
         }
         if (labels[y_bwd] == 0) {
-          bool bond_bwd = sample_bond(cfg[y], cfg[y_bwd], cfg_star, e2, rng);
+          bool bond_bwd = sample_bond(cfg[y], sy_bwd*cfg[y_bwd], cfg_star, e2, rng);
           // bool bond_bwd = bonds[get_bond_idx(y_bwd, i, shape)];
           if (bond_bwd) {
             flips[y_bwd] = cur_flip;
@@ -86,16 +86,17 @@ void flip_clusters(
   // }
 }
 
-void sample_bonds(
-    const int* cfg, int* bonds, double e2, double h_star,
-    my_rand& rng, const latt_shape* shape) {
-  for (int x = 0; x < shape->vol; ++x) {
-    const double hx = cfg[x] / 2.0;
-    for (int i = 0; i < ND; ++i) {
-      const int x_fwd = shift_site_idx(x, 1, i, shape);
-      const double hy = cfg[x_fwd] / 2.0;
-      const double R = exp(-2.0*e2*(h_star - hx)*(h_star - hy));
-      bonds[get_bond_idx(x, i, shape)] = (int)(unif_dist(rng) < (1.0 - R));
-    }
-  }
-}
+// void sample_bonds(
+//     const int* cfg, int* bonds, double e2, double h_star,
+//     my_rand& rng, const latt_shape* shape) {
+//   // NOTE: Old and does not support C-per boundaries
+//   for (int x = 0; x < shape->vol; ++x) {
+//     const double hx = cfg[x] / 2.0;
+//     for (int i = 0; i < ND; ++i) {
+//       const int x_fwd = shift_site_idx(x, 1, i, shape);
+//       const double hy = cfg[x_fwd] / 2.0;
+//       const double R = exp(-2.0*e2*(h_star - hx)*(h_star - hy));
+//       bonds[get_bond_idx(x, i, shape)] = (int)(unif_dist(rng) < (1.0 - R));
+//     }
+//   }
+// }

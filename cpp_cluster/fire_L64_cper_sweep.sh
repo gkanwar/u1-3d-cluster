@@ -1,12 +1,13 @@
 #!/bin/bash
 
-export L=96
+export L=64
 export n_iter=100000
 export n_therm=10000
 export n_skip_meas=100
+export cper=yes
 
 ALL_E2=($(seq 0.30 0.10 2.00))
-ALL_SEED=($(seq 608020 609020))
+ALL_SEED=($(seq 723976 724976))
 for i in "${!ALL_E2[@]}"; do
     e2="${ALL_E2[i]}"
     seed="${ALL_SEED[i]}"

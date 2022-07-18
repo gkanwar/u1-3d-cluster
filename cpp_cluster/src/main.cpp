@@ -75,8 +75,8 @@ void run_cluster(
     cout << "TIME flip_clusters "
          << (steady_clock::now() - _start).count() / BIL << "\n";
 
-    // re-zero cfg periodically
-    if ((i+1) % SHIFT_FREQ == 0) {
+    // re-zero cfg periodically, if periodic BCs
+    if (!shape->cper && (i+1) % SHIFT_FREQ == 0) {
       rezero_cfg(cfg);
     }
 

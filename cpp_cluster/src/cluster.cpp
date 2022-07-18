@@ -27,6 +27,12 @@ static bool sample_bond(
   const double R = exp(-2.0*e2*(h_star - hx)*(h_star - hy));
   return unif_dist(rng) < (1.0 - R);
 }
+static bool sample_bond_cper(
+    int cfg_x, int cfg_y, int cfg_star, double e2, my_rand& rng) {
+  // TODO: what goes here??
+  // NOTE: seems like 100% flippable clusters not possible with C-per boundaries!
+  return true;
+}
 
 void flip_clusters(
     int* cfg, int cfg_star, double e2,
@@ -49,7 +55,9 @@ void flip_clusters(
         const auto [y_bwd, sy_bwd] = shift_site_idx(y, -1, i, shape);
         // lazy bonds:
         if (labels[y_fwd] == 0) {
-          bool bond_fwd = sample_bond(cfg[y], sy_fwd*cfg[y_fwd], cfg_star, e2, rng);
+          bool bond_fwd = (sy_fwd == 1) ?
+              sample_bond(cfg[y], cfg[y_fwd], cfg_star, e2, rng) :
+              sample_bond_cper(cfg[y], cfg[y_fwd], cfg_star, e2, rng);
           // bool bond_fwd = bonds[get_bond_idx(y, i, shape)];
           if (bond_fwd) {
             flips[y_fwd] = cur_flip;
@@ -58,7 +66,9 @@ void flip_clusters(
           }
         }
         if (labels[y_bwd] == 0) {
-          bool bond_bwd = sample_bond(cfg[y], sy_bwd*cfg[y_bwd], cfg_star, e2, rng);
+          bool bond_bwd = (sy_bwd == 1) ?
+              sample_bond(cfg[y], cfg[y_bwd], cfg_star, e2, rng) :
+              sample_bond_cper(cfg[y], cfg[y_fwd], cfg_star, e2, rng);
           // bool bond_bwd = bonds[get_bond_idx(y_bwd, i, shape)];
           if (bond_bwd) {
             flips[y_bwd] = cur_flip;

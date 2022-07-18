@@ -307,7 +307,7 @@ def load_and_fit_cperiodic(L, e2s):
     
 
 def main2():
-    e2s = np.array([0.30])# np.arange(0.70, 2.00+1e-6, 0.10)
+    e2s = np.arange(0.70, 2.00+1e-6, 0.10)
     mass_fig, mass_ax = plt.subplots(1,1)
     colors = ['xkcd:brick red', 'xkcd:light red', 'xkcd:magenta']
     for L,color in zip([64, 96, 128], colors):

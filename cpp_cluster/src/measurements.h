@@ -64,19 +64,18 @@ inline double measure_hsq(const int* cfg, const latt_shape* shape) {
 }
 
 
-inline std::vector<double> measure_Cl(const int* cfg, const latt_shape* shape) {
-  std::vector<double> Cl(shape->dims[ND-1]);
+inline std::vector<double> measure_Cl_mom(
+    const int* cfg, const latt_shape* shape, const double e2) {
+  std::vector<double> Cl(2*shape->dims[ND-1]);
   const int mu = ND-1;
   for (int x = 0; x < shape->vol; ++x) {
     const auto [x_mu, sx_mu] = shift_site_idx(x, 1, mu, shape);
     const double lx_mu = (sx_mu*cfg[x_mu] - cfg[x]) / 2.0;
-    for (long unsigned dt = 0; dt < Cl.size(); ++dt) {
-      const auto [y, sy] = shift_site_idx(x, dt, ND-1, shape);
-      const auto [y_mu, sy_mu] = shift_site_idx(y, 1, mu, shape);
-      const double ly_mu = (sy_mu*sy*cfg[y_mu] - sy*cfg[y]) / 2.0;
-      Cl[dt] += (lx_mu * ly_mu) / shape->vol;
-    }
+    const int t = compute_comp(x, ND-1, shape);
+    Cl[t] += std::exp(-e2*lx_mu); // pos-parity
+    Cl[t + shape->dims[ND-1]] += std::exp(e2*lx_mu); // neg-parity
   }
+  
   return Cl;
 }
 

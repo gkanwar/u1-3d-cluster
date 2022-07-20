@@ -3,7 +3,7 @@
 export L=96
 export n_iter=100000
 export n_therm=10000
-export n_skip_meas=100
+export n_skip_meas=10
 
 ALL_E2=($(seq 0.30 0.10 2.00))
 ALL_SEED=($(seq 608020 609020))

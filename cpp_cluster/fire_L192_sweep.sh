@@ -11,5 +11,5 @@ for i in "${!ALL_E2[@]}"; do
     e2="${ALL_E2[i]}"
     seed="${ALL_SEED[i]}"
     echo "Firing e2=${e2} seed=${seed}"
-    sbatch --time 60:00:00 --export=ALL,e2=${e2},seed=${seed} run_one_job.sh
+    sbatch --time 06:00:00 --export=ALL,e2=${e2},seed=${seed} run_one_job.sh
 done

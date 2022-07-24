@@ -34,16 +34,18 @@ static bool sample_bond_cper(
   return true;
 }
 
-void flip_clusters(
+std::vector<int> flip_clusters(
     int* cfg, int cfg_star, double e2,
     my_rand &rng, const latt_shape* shape) {
   int cur_label = 0;
   std::vector<int> labels(shape->vol, 0);
   std::vector<int> flips(shape->vol, 0);
+  std::vector<int> cluster_sizes;
   std::stack<int> queue;
   for (int x = 0; x < shape->vol; ++x) {
     if (labels[x] != 0) continue;
     int cur_flip = 2*bit_dist(rng) - 1;
+    int cluster_size = 1;
     labels[x] = ++cur_label;
     flips[x] = cur_flip;
     queue.push(x);
@@ -60,8 +62,9 @@ void flip_clusters(
               sample_bond_cper(cfg[y], cfg[y_fwd], cfg_star, e2, rng);
           // bool bond_fwd = bonds[get_bond_idx(y, i, shape)];
           if (bond_fwd) {
-            flips[y_fwd] = cur_flip;
+            cluster_size++;
             labels[y_fwd] = cur_label;
+            flips[y_fwd] = cur_flip;
             queue.push(y_fwd);
           }
         }
@@ -71,13 +74,15 @@ void flip_clusters(
               sample_bond_cper(cfg[y], cfg[y_fwd], cfg_star, e2, rng);
           // bool bond_bwd = bonds[get_bond_idx(y_bwd, i, shape)];
           if (bond_bwd) {
-            flips[y_bwd] = cur_flip;
+            cluster_size++;
             labels[y_bwd] = cur_label;
+            flips[y_bwd] = cur_flip;
             queue.push(y_bwd);
           }
         }
       }
     }
+    cluster_sizes.push_back(cluster_size);
   }
 
   // do the flips
@@ -94,6 +99,8 @@ void flip_clusters(
   //     }
   //   }
   // }
+
+  return cluster_sizes;
 }
 
 // void sample_bonds(

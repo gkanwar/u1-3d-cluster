@@ -32,6 +32,9 @@ double sum_array(const double* arr, unsigned n) {
 }
 
 vector<int> make_init_cfg(const latt_shape* shape) {
+  if (!shape->staggered) {
+    return vector<int>(shape->vol, 0);
+  }
   vector<int> cfg(shape->vol);
   for (int idx = 0; idx < shape->vol; ++idx) {
     int tot_coord = 0;
@@ -56,22 +59,32 @@ void run_cluster(
     vector<double> &E_hist, vector<double> &M_hist,
     vector<double> &MT_hist, vector<double> &MC_hist,
     vector<double> &hsq_hist, vector<double> &Cl_mom_hist,
-    vector<cdouble> &Ch_mom_hist, vector<cdouble> &Ch_mom1_hist) {
+    vector<cdouble> &Ch_mom_hist, vector<cdouble> &Ch_mom1_hist,
+    vector<int> &cluster_histogram) {
 
   vector<int> cfg = make_init_cfg(shape);
 
   uniform_int_distribution<int> site_dist =
-      uniform_int_distribution<int>(0, shape->vol);
+      uniform_int_distribution<int>(0, shape->vol-1);
+  uniform_int_distribution<int> offset_dist =
+      uniform_int_distribution<int>(-1, 1);
   assert(ND == 3);
   const vector<double> p0{0, 0};
   const vector<double> p1{2*PI / shape->dims[0], 2*PI / shape->dims[1]};
 
+  assert(cluster_histogram.size() == (unsigned) shape->vol);
+
   for (int i = -n_therm; i < n_iter; ++i) {
     // cluster update
     const int site = site_dist(rng); // rng() % shape->vol
-    const int cfg_star = cfg[site];
+    int cfg_star = cfg[site];
+    if (!shape->staggered) {
+      cfg_star += offset_dist(rng);
+    }
+    
     auto _start = steady_clock::now();
-    flip_clusters(cfg.data(), cfg_star, e2, rng, shape);
+    const vector<int> cluster_sizes =
+        flip_clusters(cfg.data(), cfg_star, e2, rng, shape);
     cout << "TIME flip_clusters "
          << (steady_clock::now() - _start).count() / BIL << "\n";
 
@@ -80,6 +93,16 @@ void run_cluster(
       rezero_cfg(cfg);
     }
 
+    // histogram cluster sizes
+    if (i >= 0) {
+      int _cluster_tot = 0;
+      for (auto s : cluster_sizes) {
+        cluster_histogram[s]++;
+        _cluster_tot += s;
+      }
+      assert(_cluster_tot == shape->vol);
+    }
+      
     // measurements
     if (i >= 0 && (i+1) % n_skip_meas == 0) {
       cout << (i+1) << " / " << n_iter << "\n";
@@ -115,13 +138,9 @@ void run_cluster(
 
 }
 
-void write_array_to_file(const vector<double>& arr, ostream &os) {
-  for (double val : arr) {
-    os.write(reinterpret_cast<char*>(&val), sizeof(val));
-  }
-}
-void write_array_to_file(const vector<cdouble>& arr, ostream &os) {
-  for (cdouble val : arr) {
+template <typename T>
+void write_array_to_file(const vector<T>& arr, ostream &os) {
+  for (T val : arr) {
     os.write(reinterpret_cast<char*>(&val), sizeof(val));
   }
 }
@@ -130,16 +149,25 @@ void write_array_to_file(const vector<cdouble>& arr, ostream &os) {
 int main(int argc, char** argv) {
   args::ArgumentParser parser("U(1) cluster in C++");
   args::ValueFlag<int> flag_n_iter(
-      parser, "n_iter", "Number of MC iters", {"n_iter"}, args::Options::Required);
+      parser, "n_iter", "Number of MC iters", {"n_iter"},
+      args::Options::Required);
   args::ValueFlag<int> flag_n_therm(
-      parser, "n_therm", "Number of thermalization iters", {"n_therm"}, args::Options::Required);
+      parser, "n_therm", "Number of thermalization iters", {"n_therm"},
+      args::Options::Required);
   args::ValueFlag<int> flag_n_skip_meas(
-      parser, "n_skip_meas", "Number of iters between measurements", {"n_skip_meas"}, args::Options::Required);
-  args::ValueFlag<int> flag_seed(parser, "seed", "RNG seed", {"seed"}, args::Options::Required);
-  args::ValueFlag<double> flag_e2(parser, "e2", "Coupling squared", {"e2"}, args::Options::Required);
-  args::ValueFlag<int> flag_L(parser, "L", "Lattice side length", {"L"}, args::Options::Required);
-  args::ValueFlag<string> flag_out_prefix(parser, "out_prefix", "Output file prefix", {"out_prefix"}, args::Options::Required);
+      parser, "n_skip_meas", "Number of iters between measurements",
+      {"n_skip_meas"}, args::Options::Required);
+  args::ValueFlag<int> flag_seed(
+      parser, "seed", "RNG seed", {"seed"}, args::Options::Required);
+  args::ValueFlag<double> flag_e2(
+      parser, "e2", "Coupling squared", {"e2"}, args::Options::Required);
+  args::ValueFlag<int> flag_L(
+      parser, "L", "Lattice side length", {"L"}, args::Options::Required);
+  args::ValueFlag<string> flag_out_prefix(
+      parser, "out_prefix", "Output file prefix", {"out_prefix"},
+      args::Options::Required);
   args::Flag flag_cper(parser, "cper", "C-periodic BCs", {"cper"});
+  args::Flag flag_stag(parser, "stag", "Staggered model", {"stag"});
 
   try {
     parser.ParseCLI(argc, argv);
@@ -167,30 +195,39 @@ int main(int argc, char** argv) {
   const unsigned long seed = args::get(flag_seed);
   const string out_prefix = args::get(flag_out_prefix);
   const bool cper = args::get(flag_cper);
+  const bool stag = args::get(flag_stag);
   if (cper) {
     cout << "Running with C-periodic boundaries.\n";
   }
   else {
     cout << "Running with Periodic boundaries.\n";
   }
+  if (stag) {
+    cout << "Running staggered model.\n";
+  }
+  else {
+    cout << "Running unstaggered model.\n";
+  }
 
   array<int,3> dims = { L, L, L };
-  latt_shape shape = make_latt_shape(&dims.front(), cper);
+  latt_shape shape = make_latt_shape(&dims.front(), cper, stag);
 
   my_rand rng(seed);
 
-  vector<double> E_hist(n_iter / n_skip_meas);
-  vector<double> M_hist(n_iter / n_skip_meas);
-  vector<double> MT_hist(n_iter / n_skip_meas);
-  vector<double> MC_hist(n_iter / n_skip_meas);
-  vector<double> hsq_hist(n_iter / n_skip_meas);
-  vector<double> Cl_mom_hist(2 * L * n_iter / n_skip_meas);
-  vector<cdouble> Ch_mom_hist(L * n_iter / n_skip_meas);
-  vector<cdouble> Ch_mom1_hist(L * n_iter / n_skip_meas);
+  const int n_meas = n_iter / n_skip_meas;
+  vector<double> E_hist(n_meas);
+  vector<double> M_hist(n_meas);
+  vector<double> MT_hist(n_meas);
+  vector<double> MC_hist(n_meas);
+  vector<double> hsq_hist(n_meas);
+  vector<double> Cl_mom_hist(2 * L * n_meas);
+  vector<cdouble> Ch_mom_hist(L * n_meas);
+  vector<cdouble> Ch_mom1_hist(L * n_meas);
+  vector<int> cluster_histogram(shape.vol, 0);
   run_cluster(
       e2, n_iter, n_therm, n_skip_meas, rng, &shape,
       E_hist, M_hist, MT_hist, MC_hist, hsq_hist, Cl_mom_hist,
-      Ch_mom_hist, Ch_mom1_hist);
+      Ch_mom_hist, Ch_mom1_hist, cluster_histogram);
 
   double E = sum_array(E_hist.data(), E_hist.size()) / E_hist.size();
   cout << "Mean E/V = " << (E/shape.vol) << "\n";
@@ -232,6 +269,10 @@ int main(int argc, char** argv) {
   {
     ofstream f(out_prefix + "_Ch_mom1.dat", ios::binary);
     write_array_to_file(Ch_mom1_hist, f);
+  }
+  {
+    ofstream f(out_prefix + "_clust_hist.dat", ios::binary);
+    write_array_to_file(cluster_histogram, f);
   }
 
   return 0;

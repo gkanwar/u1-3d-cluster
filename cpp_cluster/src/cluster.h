@@ -7,7 +7,7 @@
 
 using my_rand = std::mt19937_64;
 
-void flip_clusters(
+std::vector<int> flip_clusters(
     int* cfg, int cfg_star, double e2,
     my_rand &rng, const latt_shape* shape);
 

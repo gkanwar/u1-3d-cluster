@@ -39,9 +39,21 @@ else
     CPER_TAG='_cper'
 fi
 
+if [ -z "${unstag+x}" ]; then
+    STAG_FLAG='--stag'
+    STAG_TAG=''
+else
+    STAG_FLAG=''
+    STAG_TAG='_unstag'
+fi
+
+if [ -z "${out_dir+x}" ]; then
+    out_dir=raw_obs
+fi
+
 
 cd /space4/kanwar/quantum_link/u1/cpp_cluster
 srun --ntasks-per-node=1 \
     ./src/u1_3d_cluster --n_iter=${n_iter} --n_therm=${n_therm} --n_skip_meas=${n_skip_meas} \
-    --seed=${seed} --e2=${e2} --L=${L} ${CPER_FLAG} \
-    --out_prefix=raw_obs/obs_trace_${e2}_L${L}_cluster${CPER_TAG}
+    --seed=${seed} --e2=${e2} --L=${L} ${CPER_FLAG} ${STAG_FLAG} \
+    --out_prefix=${out_dir}/obs_trace_${e2}_L${L}_cluster${CPER_TAG}${STAG_TAG}

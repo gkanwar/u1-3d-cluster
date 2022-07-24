@@ -15,12 +15,14 @@ typedef struct {
   int vol;
   // c-periodicity in spatial dirs
   bool cper;
+  // half-integer staggered vs unstaggered
+  bool staggered;
 } latt_shape;
 
-inline latt_shape make_latt_shape(int* dims, bool cper) {
+inline latt_shape make_latt_shape(int* dims, bool cper, bool staggered) {
   latt_shape shape = {
     .dims = {0}, .strides = {0}, .blocks = {0},
-    .vol = 1, .cper = cper
+    .vol = 1, .cper = cper, .staggered =  staggered
   };
   for (int i = ND-1; i >= 0; --i) {
     shape.dims[i] = dims[i];

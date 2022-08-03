@@ -4,6 +4,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --output=/space4/kanwar/quantum_link/u1/cpp_cluster/slurm_logs/slurm-%j.out
+#SBATCH --mem-per-cpu 2000M
 
 if [ -z "${e2+x}" ]; then
     echo "Must set e2"

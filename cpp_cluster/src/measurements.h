@@ -3,10 +3,7 @@
 
 #include <vector>
 #include "lattice.h"
-
-inline double sq(double x) {
-  return x*x;
-}
+#include "util.h"
 
 inline double measure_E(const int* cfg, const latt_shape* shape) {
   double E = 0;

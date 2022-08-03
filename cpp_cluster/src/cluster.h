@@ -2,10 +2,9 @@
 #define CLUSTER_H
 
 #include <cassert>
-#include <random>
 #include "lattice.h"
+#include "my_rand.h"
 
-using my_rand = std::mt19937_64;
 
 std::vector<int> flip_clusters(
     int* cfg, int cfg_star, double e2,

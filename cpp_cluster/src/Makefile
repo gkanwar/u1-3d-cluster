@@ -7,12 +7,14 @@ ARFLAGS := -rcs
 
 build: u1_3d_cluster
 
-MY_HEADERS = cluster.h lattice.h measurements.h
+MY_HEADERS = cluster.h lattice.h measurements.h metropolis.h util.h
 main.o: main.cpp $(MY_HEADERS) args.hxx
 	$(CXX) $(CCFLAGS) -o $@ -c $<
 cluster.o: cluster.cpp $(MY_HEADERS)
 	$(CXX) $(CCFLAGS) -o $@ -c $<
-u1_3d_cluster: main.o cluster.o
+metropolis.o: metropolis.cpp $(MY_HEADERS)
+	$(CXX) $(CCFLAGS) -o $@ -c $<
+u1_3d_cluster: main.o cluster.o metropolis.o
 	$(CXX) $(CCFLAGS) -o $@ $^
 
 GTEST_DIR := gtest/googletest

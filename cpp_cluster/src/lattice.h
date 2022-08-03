@@ -66,8 +66,4 @@ inline int get_site_idx(int x, int y, int z, const latt_shape* shape) {
   return x*shape->strides[0] + y*shape->strides[1] + z;
 }
 
-/// Misc util
-using cdouble = std::complex<double>;
-using namespace std::complex_literals;
-
 #endif

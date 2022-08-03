@@ -14,6 +14,8 @@
 #include "cluster.h"
 #include "lattice.h"
 #include "measurements.h"
+#include "metropolis.h"
+#include "my_rand.h"
 #include "args.hxx"
 
 constexpr int SHIFT_FREQ = 100;
@@ -54,7 +56,7 @@ void rezero_cfg(vector<int>& cfg) {
 }
 
 void run_cluster(
-    double e2, int n_iter, int n_therm, int n_skip_meas,
+    double e2, int n_iter, int n_therm, int n_skip_meas, int n_metr,
     my_rand& rng, const latt_shape* shape,
     vector<double> &E_hist, vector<double> &M_hist,
     vector<double> &MT_hist, vector<double> &MC_hist,
@@ -76,10 +78,13 @@ void run_cluster(
 
   for (int i = -n_therm; i < n_iter; ++i) {
     // cluster update
-    const int site = site_dist(rng); // rng() % shape->vol
-    int cfg_star = cfg[site];
-    if (!shape->staggered) {
-      cfg_star += offset_dist(rng);
+    int cfg_star = 0;
+    if (!shape->cper) {
+      const int site = site_dist(rng); // rng() % shape->vol
+      cfg_star = cfg[site];
+      if (!shape->staggered) {
+        cfg_star += offset_dist(rng);
+      }
     }
     
     auto _start = steady_clock::now();
@@ -87,6 +92,20 @@ void run_cluster(
         flip_clusters(cfg.data(), cfg_star, e2, rng, shape);
     cout << "TIME flip_clusters "
          << (steady_clock::now() - _start).count() / BIL << "\n";
+
+    // metropolis update
+    _start = steady_clock::now();
+    for (int i = 0; i < n_metr; ++i) {
+      if (i == 0) {
+        cout << "Metropolis...\n";
+      }
+      double acc = metropolis_update(cfg.data(), e2, rng, shape);
+      cout << "\t" << (i+1) << " / " << n_metr << ", acc = " << acc << "\n";
+      if (i == n_metr-1) {
+        cout << "TIME metropolis_update "
+             << (steady_clock::now() - _start).count() / BIL << "\n";
+      }
+    }
 
     // re-zero cfg periodically, if periodic BCs
     if (!shape->cper && (i+1) % SHIFT_FREQ == 0) {
@@ -157,6 +176,9 @@ int main(int argc, char** argv) {
   args::ValueFlag<int> flag_n_skip_meas(
       parser, "n_skip_meas", "Number of iters between measurements",
       {"n_skip_meas"}, args::Options::Required);
+  args::ValueFlag<int> flag_n_metr(
+      parser, "n_metr", "Number of metropolis hits per iter",
+      {"n_metr"}, 0);
   args::ValueFlag<int> flag_seed(
       parser, "seed", "RNG seed", {"seed"}, args::Options::Required);
   args::ValueFlag<double> flag_e2(
@@ -192,6 +214,7 @@ int main(int argc, char** argv) {
   const int n_iter = args::get(flag_n_iter);
   const int n_therm = args::get(flag_n_therm);
   const int n_skip_meas = args::get(flag_n_skip_meas);
+  const int n_metr = args::get(flag_n_metr);
   const unsigned long seed = args::get(flag_seed);
   const string out_prefix = args::get(flag_out_prefix);
   const bool cper = args::get(flag_cper);
@@ -225,7 +248,7 @@ int main(int argc, char** argv) {
   vector<cdouble> Ch_mom1_hist(L * n_meas);
   vector<int> cluster_histogram(shape.vol, 0);
   run_cluster(
-      e2, n_iter, n_therm, n_skip_meas, rng, &shape,
+      e2, n_iter, n_therm, n_skip_meas, n_metr, rng, &shape,
       E_hist, M_hist, MT_hist, MC_hist, hsq_hist, Cl_mom_hist,
       Ch_mom_hist, Ch_mom1_hist, cluster_histogram);
 

@@ -28,10 +28,13 @@ static bool sample_bond(
   return unif_dist(rng) < (1.0 - R);
 }
 static bool sample_bond_cper(
-    int cfg_x, int cfg_y, int cfg_star, double e2, my_rand& rng) {
-  // TODO: what goes here??
-  // NOTE: seems like 100% flippable clusters not possible with C-per boundaries!
-  return true;
+    int cfg_x, int cfg_y, [[maybe_unused]] int cfg_star, double e2, my_rand& rng) {
+  // C-per clusters only valid for flips about 0
+  assert(cfg_star == 0);
+  const double hx = cfg_x / 2.0;
+  const double hy = -cfg_y / 2.0; // C flip through boundary
+  const double R = exp(-2.0*e2*hx*hy);
+  return unif_dist(rng) < (1.0 - R);
 }
 
 std::vector<int> flip_clusters(

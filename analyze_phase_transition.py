@@ -39,7 +39,7 @@ def load_sweep(sweep, *, kind):
                     continue
 
             elif kind == 'cpp':
-                prefix = f'cpp_cluster/obs_trace_{e2:0.2f}_L{L}_cluster'
+                prefix = f'cpp_cluster/raw_obs/obs_trace_{e2:0.2f}_L{L}_cluster'
                 if not os.path.exists(prefix + '_E.dat'):
                     print(f'Skipping prefix {prefix} (does not exist)')
                     continue
@@ -113,12 +113,15 @@ def fit_mc2_curve(e2s, MC2_means, MC2_errs, *, err_rescale=1.0):
 def plot_results():
     sweep1 = (
         # np.array([8, 16, 32, 48, 64, 80, 96, 128], dtype=int),
-        np.array([128]),
+        np.array([32, 48, 64, 80, 96, 128]),
         np.arange(0.30, 1.80+1e-6,  0.05),
     )
     sweep2 = (
         np.array([192, 256], dtype=int),
-        np.arange(0.30, 0.55+1e-6, 0.05)
+        np.concatenate((
+            np.arange(0.30, 0.55+1e-6, 0.05),
+            np.arange(0.70, 1.80+1e-6, 0.10)
+        ))
     )
     traces1 = load_sweep(sweep1, kind='npy')
     traces2 = load_sweep(sweep2, kind='cpp')

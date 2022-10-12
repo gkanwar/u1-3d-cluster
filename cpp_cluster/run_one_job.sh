@@ -32,6 +32,12 @@ if [ -z "${seed+x}" ]; then
     exit
 fi
 
+if [ -z "${n_metr+x}" ]; then
+    NMETR_FLAG=''
+else
+    NMETR_FLAG="--n_metr=${n_metr}"
+fi
+
 if [ -z "${cper+x}" ]; then
     CPER_FLAG=''
     CPER_TAG=''
@@ -56,5 +62,5 @@ fi
 cd /space4/kanwar/quantum_link/u1/cpp_cluster
 srun --ntasks-per-node=1 \
     ./src/u1_3d_cluster --n_iter=${n_iter} --n_therm=${n_therm} --n_skip_meas=${n_skip_meas} \
-    --seed=${seed} --e2=${e2} --L=${L} ${CPER_FLAG} ${STAG_FLAG} \
+    --seed=${seed} --e2=${e2} --L=${L} ${CPER_FLAG} ${STAG_FLAG} ${NMETR_FLAG} \
     --out_prefix=${out_dir}/obs_trace_${e2}_L${L}_cluster${CPER_TAG}${STAG_TAG}

@@ -3,20 +3,26 @@
 ### points and extract a location of the 2nd order critical point.
 
 import analysis as al
+import itertools
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy as sp
+import scipy.interpolate
 import scipy.optimize
 import os
 import paper_plt
 paper_plt.load_latex_config()
 
 
-def load_sweep(sweep, *, kind):
+def load_sweep(sweep, *, kind, M_bins, MC_bins):
     Ls, e2s = sweep
     all_traces = []
+    all_hists = [
+        { 'M_hist': [], 'MC_hist': [] } for _ in e2s
+    ]
     do_bin = lambda x: al.bin_data(x, binsize=20)[1]
+    assert len(M_bins) == len(e2s) and len(MC_bins) == len(e2s)
     for L in Ls:
         V = L**3
         trace_e2s = []
@@ -26,7 +32,7 @@ def load_sweep(sweep, *, kind):
         trace_MC2 = []
         trace_MCsus = []
         trace_E = []
-        for e2 in e2s:
+        for i, (e2, M_bin, MC_bin) in enumerate(zip(e2s, M_bins, MC_bins)):
             if kind == 'npy':
                 fname = f'raw_obs/obs_trace_{e2:0.2f}_L{L}_mixed.npy'
                 if not os.path.exists(fname):
@@ -57,6 +63,7 @@ def load_sweep(sweep, *, kind):
                     
             print(f'... loaded timeseries with {len(d["M"])} pts')
             trace_e2s.append(e2)
+            # order param traces
             M = al.bootstrap(do_bin(d['M']), Nboot=1000, f=al.rmean)
             M2 = al.bootstrap(do_bin(d['M']**2), Nboot=1000, f=al.rmean)
             MC = al.bootstrap(do_bin(d['MC']), Nboot=1000, f=al.rmean)
@@ -71,6 +78,20 @@ def load_sweep(sweep, *, kind):
             trace_MC2.append(MC2)
             trace_MCsus.append(MCsus)
             trace_E.append(E)
+            # symmetrized hists
+            M_hist_estimator = lambda x: np.histogram(
+                np.concatenate((x, -x)) / V, bins=M_bin)[0] / (2*len(x))
+            MC_hist_estimator = lambda x: np.histogram(
+                np.concatenate((x, -x)) / V, bins=MC_bin)[0] / (2*len(x))
+            M_hist = al.bootstrap(d['M'], Nboot=100, f=M_hist_estimator)
+            MC_hist = al.bootstrap(d['MC'], Nboot=100, f=MC_hist_estimator)
+            # M_hist = np.histogram(
+            #     np.concatenate((d['M'], -d['M'])) / V, bins=M_bin)[0] / (2*len(d['M']))
+            # MC_hist = np.histogram(
+            #     np.concatenate((d['MC'], -d['MC'])) / V, bins=MC_bin)[0] / (2*len(d['MC']))
+            all_hists[i]['M_hist'].append((L, M_hist))
+            all_hists[i]['MC_hist'].append((L, MC_hist))
+            
         trace_e2s = np.array(trace_e2s)
         trace_M = np.transpose(trace_M)
         trace_M2 = np.transpose(trace_M2)
@@ -85,9 +106,9 @@ def load_sweep(sweep, *, kind):
             'MC': trace_MC,
             'MC2': trace_MC2,
             'MCsus': trace_MCsus,
-            'E': trace_E
+            'E': trace_E,
         })
-    return all_traces
+    return all_traces, all_hists
 
 def fit_mc2_curve(e2s, MC2_means, MC2_errs, *, err_rescale=1.0):
     print(e2s)
@@ -110,6 +131,47 @@ def fit_mc2_curve(e2s, MC2_means, MC2_errs, *, err_rescale=1.0):
         'chisq_per_dof': chisq_per_dof
     }
 
+# TODO: range cmap colors?
+# colors = {
+#     8: 'xkcd:pink',
+#     16: 'xkcd:green',
+#     32: 'xkcd:blue',
+#     48: 'xkcd:gray',
+#     64: 'k',
+#     80: 'xkcd:red',
+#     96: 'xkcd:purple',
+#     128: 'xkcd:forest green',
+#     192: 'xkcd:cyan',
+#     256: 'xkcd:magenta'
+# }
+cmap = plt.get_cmap('cividis_r')
+colors = {}
+for L in [8, 16, 32, 48, 64, 80, 96, 128, 192, 256]:
+    colors[L] = cmap(L / 256)
+markers = {
+    8: 'o',
+    16: 's',
+    32: '^',
+    48: 'x',
+    64: 'v',
+    80: '*',
+    96: '.',
+    128: 'p',
+    192: 'h',
+    256: 'P'
+}
+
+def concat_dicts(ds):
+    keys = None
+    for d in ds:
+        if keys is None:
+            keys = list(d.keys())
+        assert set(keys) == set(d.keys())
+    return {
+        k: sum((d[k] for d in ds), start=[])
+        for k in keys
+    }
+
 def plot_results():
     sweep1 = (
         # np.array([8, 16, 32, 48, 64, 80, 96, 128], dtype=int),
@@ -123,34 +185,67 @@ def plot_results():
             np.arange(0.70, 1.80+1e-6, 0.10)
         ))
     )
-    traces1 = load_sweep(sweep1, kind='npy')
-    traces2 = load_sweep(sweep2, kind='cpp')
+    all_e2 = sorted(list(set(sweep1[1]) | set(sweep2[1])))
+    def make_MC_bins(e2):
+        peak_loc_ansatz = max(1e-3, np.sqrt(6.0)*np.exp(-3.27 / e2))
+        return np.linspace(-1.5*peak_loc_ansatz, 1.5*peak_loc_ansatz, endpoint=True, num=51)
+    M_bins_by_e2 = {
+        e2: np.linspace(-1.5e-3, 1.5e-3, endpoint=True, num=51)
+        for e2 in all_e2
+    }
+    MC_bins_by_e2 = {
+        e2: make_MC_bins(e2) for e2 in all_e2
+    }
+    MC_bins_sweep1 = [MC_bins_by_e2[e2] for e2 in sweep1[1]]
+    MC_bins_sweep2 = [MC_bins_by_e2[e2] for e2 in sweep2[1]]
+    M_bins_sweep1 = [M_bins_by_e2[e2] for e2 in sweep1[1]]
+    M_bins_sweep2 = [M_bins_by_e2[e2] for e2 in sweep2[1]]
+    traces1, hists1 = load_sweep(
+        sweep1, kind='npy', M_bins=M_bins_sweep1, MC_bins=MC_bins_sweep1)
+    traces2, hists2 = load_sweep(
+        sweep2, kind='cpp', M_bins=M_bins_sweep2, MC_bins=MC_bins_sweep2)
 
-    colors = {
-        8: 'xkcd:pink',
-        16: 'xkcd:green',
-        32: 'xkcd:blue',
-        48: 'xkcd:gray',
-        64: 'k',
-        80: 'xkcd:red',
-        96: 'xkcd:purple',
-        128: 'xkcd:forest green',
-        192: 'xkcd:cyan',
-        256: 'xkcd:magenta'
-    }
-    markers = {
-        8: 'o',
-        16: 's',
-        32: '^',
-        48: 'x',
-        64: 'v',
-        80: '*',
-        96: '.',
-        128: 'p',
-        192: 'h',
-        256: 'P'
-    }
-    
+    ### Order param histograms
+    all_bins_hists = [
+        (M_bins_by_e2[e2], MC_bins_by_e2[e2],
+         concat_dicts(
+             [hists1[i] for i in np.flatnonzero(sweep1[1] == e2)] +
+             [hists2[i] for i in np.flatnonzero(sweep2[1] == e2)]))
+        for e2 in all_e2
+    ]
+    for e2,(M_bins,MC_bins,hist) in zip(all_e2, all_bins_hists):
+        M_hists = hist['M_hist']
+        MC_hists = hist['MC_hist']
+        fig, ax = plt.subplots(1,1, figsize=(3.75, 3.0))
+        print('bins', M_bins)
+        # print('hist', M_hists[0][1].shape)
+        print('Ls', [M_hist[0] for M_hist in M_hists])
+        for L, M_hist in M_hists:
+            xs = (M_bins[1:] + M_bins[:-1])/2
+            ys = M_hist
+            # ax.step(M_bins[1:], M_hist, color=colors[L], label=rf'$L={L}$')
+            # ax.plot(xs, ys, color=colors[L], marker='.', label=rf'$L={L}$')
+            al.add_errorbar(ys, xs=xs, ax=ax, color=colors[L], marker='.', label=rf'$L={L}$')
+        ax.set_xlim(np.min(M_bins), np.max(M_bins))
+        ax.set_xlabel(r'$\left< M \right> / V$')
+        ax.legend()
+        fig.savefig(f'figs/M_hist_{e2:0.2f}.pdf')
+        fig, ax = plt.subplots(1,1, figsize=(3.75, 3.0))
+        for L, MC_hist in MC_hists:
+            print('plot L =', L, np.sum(MC_hist))
+            xs = (MC_bins[1:] + MC_bins[:-1])/2
+            ys = MC_hist
+            # ax.step(MC_bins[1:], MC_hist, color=colors[L], label=rf'$L={L}$')
+            # ax.bar(MC_bins[:-1], MC_hist, width=MC_bins[1]-MC_bins[0],
+            #        alpha=0.3, color=colors[L], label=rf'$L={L}$')
+            # ax.plot(xs, ys, color=colors[L], marker='.', label=rf'$L={L}$')
+            al.add_errorbar(ys, xs=xs, ax=ax, color=colors[L], marker='.', label=rf'$L={L}$')
+        ax.set_xlim(np.min(MC_bins), np.max(MC_bins))
+        ax.set_xlabel(r'$\left< M_C \right> / V$')
+        ax.legend()
+        fig.savefig(f'figs/MC_hist_{e2:0.2f}.pdf')
+
+    ### Joint order param sweep plots
     fig, axes = plt.subplots(3,3, figsize=(10,6))
     for i,(L,trace) in enumerate(zip(sweep1[0], traces1)):
         color, marker = colors[L], markers[L]
@@ -166,6 +261,7 @@ def plot_results():
         al.add_errorbar(trace['MCsus'] / V, ax=axes[1,2], **style)
         al.add_errorbar(trace['E'] / V, ax=axes[0,2], **style)
 
+        # Fit L=128 as the "infinite volume" curve
         if L == 128:
             ti, tf = 4, 20
             res = fit_mc2_curve(
@@ -210,7 +306,7 @@ def plot_results():
     axes[2,2].legend(handles, labels)
 
     fig.set_tight_layout(True)
-    fig.savefig('figs/phase_transition_sweep1.pdf')
+    fig.savefig('figs/phase_transition_sweep2.pdf')
 
 if __name__ == '__main__':
     plot_results()

@@ -2,7 +2,7 @@ all: build
 
 CXX := g++
 AR := ar
-CCFLAGS := -Ofast -flto -DNDEBUG -std=c++17 -Wall -Wextra
+CCFLAGS := -Ofast -flto -DNDEBUG -std=c++17 -Wall -Wextra -march=native
 ARFLAGS := -rcs
 
 build: u1_3d_cluster
@@ -46,5 +46,5 @@ tests: tests.o cluster.o $(GTEST_BUILD_DIR)/gtest_main.a
 	$(CXX) $(GTEST_CCFLAGS) -lpthread $^ -o $@
 
 clean:
-	rm -f u1_3d_cluster tests main.o cluster.o tests.o
+	rm -f u1_3d_cluster tests main.o metropolis.o cluster.o tests.o
 	rm -rf $(GTEST_BUILD_DIR)

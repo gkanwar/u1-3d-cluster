@@ -80,8 +80,20 @@ def compute_MC(cfg): # cube magnetization
     )
     return np.sum(O_cube[mask]) - np.sum(O_cube[~mask])
 
+def compute_MS(cfg): # star magnetization
+    h = cfg/2
+    mask = get_checkerboard_mask(0, shape=cfg.shape)
+    Nd = len(cfg.shape)
+    hs = []
+    for mu in range(Nd):
+        hs.append(np.roll(h, -1, axis=mu))
+        hs.append(np.roll(h, 1, axis=mu))
+    hbar = np.mean(hs, axis=0)
+    O_star = np.sum((np.stack(hs, axis=0) - hbar)**2, axis=0)
+    return np.sum(O_star[~mask]) - np.sum(O_star[mask])
+
 def make_obs_hist(f, bins):
-    def obs_hist(cfg, state):
+    def obs_hist(cfg, state, _res):
         f_cfg = f(cfg)
         if state is None:
             state = (bins, np.zeros(len(bins)-1, dtype=int))
@@ -94,8 +106,19 @@ def make_obs_hist(f, bins):
 obs_hist_M = make_obs_hist(compute_M, bins=np.linspace(-0.1, 0.1, num=50, endpoint=True))
 obs_hist_MT = make_obs_hist(compute_MT, bins=np.linspace(-0.1, 0.1, num=50, endpoint=True))
 
+def make_obs_hist_clust_sizes(V):
+    def obs_hist(cfg, state, res):
+        assert 'labels' in res
+        _, counts = np.unique(res['labels'], return_counts=True)
+        if state is None:
+            state = np.zeros(V+1, dtype=int)
+        for c in counts:
+            state[c] += 1
+        return state
+    return obs_hist
+
 def make_obs_trace(f):
-    def obs_trace(cfg, state):
+    def obs_trace(cfg, state, _res):
         if state is None: state = []
         state.append(f(cfg))
         return state
@@ -104,6 +127,7 @@ def make_obs_trace(f):
 obs_trace_M = make_obs_trace(compute_M)
 obs_trace_MT = make_obs_trace(compute_MT)
 obs_trace_MC = make_obs_trace(compute_MC)
+obs_trace_MS = make_obs_trace(compute_MS)
 
 def mcmc(cfg0, *, e2, n_step, n_mc_skip, n_obs_skip, update, n_therm=0, save_cfg=True, obs={}):
     cfg = np.copy(cfg0)
@@ -111,7 +135,7 @@ def mcmc(cfg0, *, e2, n_step, n_mc_skip, n_obs_skip, update, n_therm=0, save_cfg
     actions = []
     obs_vals = {k: None for k in obs}
     for i in tqdm.tqdm(range(-n_therm*n_mc_skip, n_step*n_mc_skip)):
-        update(cfg, e2=e2)
+        _, res = update(cfg, e2=e2)
         # if (i+1) % 100 == 0:
         #     randomly_translate(cfg)
         if i >= 0 and (i+1) % n_mc_skip == 0:
@@ -119,7 +143,7 @@ def mcmc(cfg0, *, e2, n_step, n_mc_skip, n_obs_skip, update, n_therm=0, save_cfg
             actions.append(action(cfg, e2=e2))
         if i >= 0 and (i+1) % n_obs_skip == 0:
             for k,O in obs.items():
-                obs_vals[k] = O(cfg, obs_vals[k])
+                obs_vals[k] = O(cfg, obs_vals[k], res)
     return {
         'cfgs': ens,
         'Ss': np.array(actions),

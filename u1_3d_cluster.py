@@ -115,7 +115,7 @@ def cluster_update(cfg, *, e2):
     print(f'sample_flip_mask_cext time = {_end2b-_start2b:.4f}s')
     print(f'print_clusters time = {_end3-_start3:.4f}s')
     print(f'do_update time = {_end4-_start4:.4f}s')
-    return cfg
+    return cfg, { 'labels': res2['labels'] }
 
 def metropolis_update(cfg, *, e2):
     assert len(cfg.shape) == 3, 'specialized for 3d'
@@ -141,7 +141,7 @@ def metropolis_update(cfg, *, e2):
             cfg[x] = new_cfg_x
             acc += 1
     print(f'Acc rate {100*acc/hits:.2f}%')
-    return cfg
+    return cfg, { 'acc': acc/hits }
 
 def hb_update(cfg, *, e2):
     mask = get_checkerboard_mask(0, shape=cfg.shape)
@@ -165,7 +165,7 @@ def hb_update(cfg, *, e2):
     acc = r[mask] < np.exp(-new_S[mask] + S[mask])
     ind_acc = tuple(np.transpose(np.argwhere(mask)[acc]))
     cfg[ind_acc] = new_cfg[ind_acc]
-    return cfg
+    return cfg, {}
 
 # mixed_update = lambda cfg, *, e2: hb_update(cluster_update(cfg, e2=e2), e2=e2)
 ### FORNOW - skip heatbath
@@ -426,6 +426,30 @@ def run_trace_sweep(rank):
     obs_trace['version'] = 5
     np.save(f'raw_obs/obs_trace_{e2:0.2f}_L{L}_mixed.npy', obs_trace)
 
+def run_infinite_e2(rank):
+    all_Ls = np.array([48, 64, 80, 96], dtype=int)
+    e2 = 100.0
+    n_step = 1000
+    th = 10
+    if rank >= len(all_Ls): return
+    L = all_Ls[rank]
+    shape = (L,)*3
+    cfg0 = make_init_cfg(shape)
+
+    obs_hist_clust_sizes = make_obs_hist_clust_sizes(L**3)
+    res_clust = mcmc(
+        cfg0, e2=e2, n_step=n_step, n_therm=th, n_mc_skip=1, n_obs_skip=1,
+        save_cfg=False, update=mixed_update,
+        obs={
+            'clust_sizes': obs_hist_clust_sizes,
+            'M': obs_trace_M,
+            'MT': obs_trace_MT,
+            'MC': obs_trace_MC,
+            'MS': obs_trace_MS
+        })
+    obs_hist = {k: np.array(v) for k,v in res_clust['Os'].items()}
+    np.save(f'infinite_e2/clust_sizes_L{L}_mixed.npy', obs_hist)
+
 def run_big_ensembles():
     L = 64
     shape = (L,)*3
@@ -444,6 +468,6 @@ def run_big_ensembles():
 
 def main():
     rank = int(sys.argv[1]) if len(sys.argv) == 2 else 0
-    run_trace_sweep(rank)
+    run_infinite_e2(rank)
 
 if __name__ == '__main__': main()

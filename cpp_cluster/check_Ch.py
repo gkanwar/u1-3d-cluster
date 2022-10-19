@@ -229,7 +229,29 @@ def do_basic_exp_fit(C_est):
     fit_ts = ts[3:16]
     f = lambda t,A,m: A*np.exp(-m*t)
     fit_mean, fit_err = mean[fit_ts], err[fit_ts]
-    popt, pcov = sp.optimize.curve_fit(f, fit_ts, fit_mean, sigma=fit_err, maxfev=10000)
+    popt, pcov = sp.optimize.curve_fit(
+        f, fit_ts, fit_mean, sigma=fit_err, maxfev=100000,
+        bounds=([-np.inf, 0.0], [np.inf, np.inf]))
+    fopt = lambda t: f(t, *popt)
+    resid = fopt(fit_ts) - fit_mean
+    chisq = np.sum(resid**2 / fit_err**2)
+    chisq_per_dof = chisq / (len(fit_mean) - len(popt))
+    # print(f'{chisq=} {chisq_per_dof=}')
+    return {
+        'params': popt,
+        'f': fopt,
+    }
+
+def do_subtracted_exp_fit(C_est, *, p0=None):
+    mean, err = C_est
+    Lt = len(mean)
+    ts = np.arange(Lt)
+    fit_ts = ts[3:-3]
+    f = lambda t,A,m: A*(np.cosh(m*(t - Lt//2)) - 1)
+    fit_mean, fit_err = mean[fit_ts], err[fit_ts]
+    popt, pcov = sp.optimize.curve_fit(
+        f, fit_ts, fit_mean, sigma=fit_err, maxfev=100000,
+        bounds=([-np.inf, 0.0], [np.inf, np.inf]), p0=p0)
     fopt = lambda t: f(t, *popt)
     resid = fopt(fit_ts) - fit_mean
     chisq = np.sum(resid**2 / fit_err**2)
@@ -286,12 +308,16 @@ def load_and_fit_periodic(L, e2s):
 
         # estimate C masses
         m_boots = []
+        _params_hint = None
         for C_boot, in al.bootstrap_gen(al.bin_data(C, binsize=20)[1], Nboot=Nboot):
             C_boot = al.rmean(C_boot) / avg_C0
             C_boot -= C_boot[L//2]
             res = do_basic_exp_fit((C_boot, C_est[1]))
+            # res = do_subtracted_exp_fit((C_boot, C_est[1]), p0=_params_hint)
             m_boots.append(res["params"][1])
+            _params_hint = res["params"]
         res = do_basic_exp_fit(C_est)
+        # res = do_subtracted_exp_fit(C_est, p0=_params_hint)
         m = res["params"][1]
         fit_f = res['f']
         masses.append((np.mean(m_boots), np.std(m_boots)))
@@ -301,19 +327,21 @@ def load_and_fit_periodic(L, e2s):
             C2_boot = al.rmean(C2_boot) / avg_C20
             C2_boot -= C2_boot[L//2]
             res = do_basic_exp_fit((C2_boot, C2_est[1]))
+            # res = do_subtracted_exp_fit((C2_boot, C2_est[1]))
             m2_boots.append(res["params"][1])
         res = do_basic_exp_fit(C2_est)
+        # res = do_subtracted_exp_fit(C2_est)
         m2 = res["params"][1]
         fit_f2 = res['f']
         masses2.append((np.mean(m2_boots), np.std(m2_boots)))
         print(f'm2={masses2[-1]}')        
 
         # plot C and fit
-        al.add_errorbar(C_est, ax=ax, marker='o', color=color, label=f'$e^2={e2:.02f}$')
-        al.add_errorbar(C2_est, ax=ax, marker='s', color=color)
+        al.add_errorbar(C_est, ax=ax, marker='o', color=color, label=f'$e^2={e2:.02f}$', linestyle='')
+        al.add_errorbar(C2_est, ax=ax, marker='s', color=color, linestyle='')
         ts = np.arange(L)
         ax.plot(ts, fit_f(ts), color=color)
-        ax.plot(ts, fit_f2(ts), color=color, linestyle='--')
+        # ax.plot(ts, fit_f2(ts), color=color, linestyle='--')
 
         # skip Cl if not available
         if Cl_mom is None: continue
@@ -331,7 +359,7 @@ def load_and_fit_periodic(L, e2s):
         # estimate Cl masses
         ml_boots = []
         for Cl_boot, in al.bootstrap_gen(al.bin_data(Cl, binsize=20)[1], Nboot=Nboot):
-            Cl_boot = al.rmean(Cl_boot) / avg_C0
+            Cl_boot = al.rmean(Cl_boot) / avg_Cl0
             # Cl_boot -= Cl_boot[L//2]
             res = do_basic_exp_fit((Cl_boot, Cl_est[1]))
             ml_boots.append(res["params"][1])
@@ -402,8 +430,8 @@ def load_and_fit_cperiodic(L, e2s):
     
 
 def main2():
-    e2s = np.arange(0.70, 2.00+1e-6, 0.10)
-    Ls = [64, 96, 128, 192]
+    e2s = np.arange(0.70, 1.00+1e-6, 0.10)
+    Ls = [64] #, 96, 128, 192]
     mass_fig, mass_ax = plt.subplots(1,1)
     colors = ['xkcd:gray', 'xkcd:navy blue', 'xkcd:forest green', 'xkcd:red']
     for L,color in zip(Ls, colors):
@@ -415,11 +443,11 @@ def main2():
             al.add_errorbar(
                 res['masses_l'][1], xs=res['masses_l'][0],
                 ax=mass_ax, marker='s', **style, label=f'$L={L}$ [glue,-]')
-        try:
-            masses = load_and_fit_cperiodic(L, e2s)
-            al.add_errorbar(masses, xs=e2s, ax=mass_ax, marker='x', **style, label=f'$L={L}$ (cper)')
-        except FileNotFoundError as e:
-            print(f'Skipping cper L={L} ...', repr(e))
+        # try:
+        #     masses = load_and_fit_cperiodic(L, e2s)
+        #     al.add_errorbar(masses, xs=e2s, ax=mass_ax, marker='x', **style, label=f'$L={L}$ (cper)')
+        # except FileNotFoundError as e:
+        #     print(f'Skipping cper L={L} ...', repr(e))
             
     mass_ax.set_xlabel('$e^2$')
     mass_ax.set_ylabel('$m$')

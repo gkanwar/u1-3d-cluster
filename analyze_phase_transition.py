@@ -110,19 +110,27 @@ def load_sweep(sweep, *, kind, M_bins, MC_bins):
         })
     return all_traces, all_hists
 
-def fit_mc2_curve(e2s, MC2_means, MC2_errs, *, err_rescale=1.0):
+def fit_mc2_curve(e2s, MC2_means, MC2_errs, *, fix_ec, err_rescale=1.0):
     print(e2s)
     print(MC2_means)
     print(MC2_errs)
     MC2_errs *= err_rescale
-    f = lambda e2, A, B: A*np.exp(-B/e2)
+    g = lambda e2, A, B, e2c: A*np.exp(-B/(e2-e2c))
+    if fix_ec:
+        f = lambda e2, A, B: g(e2, A, B, 0.0)
+        bounds = [[0.0]*2, [np.inf]*2]
+        p0 = (1.0, 1.0)
+    else:
+        f = g
+        bounds = [[0.0]*3, [np.inf]*3]
+        p0 = (1.0, 1.0, 0.0)
     popt, pcov = sp.optimize.curve_fit(
-        f, e2s, MC2_means, sigma=MC2_errs, bounds=[[0.0, 0.0], [np.inf, np.inf]])
+        f, e2s, MC2_means, sigma=MC2_errs, bounds=bounds, p0=p0)
     f_opt = lambda e2: f(e2, *popt)
     resid = MC2_means - f_opt(e2s)
     chisq = np.sum(resid**2 / MC2_errs**2)
     chisq_per_dof = chisq / (len(e2s) - len(popt))
-    print(f'fit params = {popt}')
+    print(f'fit params = {popt} ({np.sqrt(np.diag(pcov))})')
     print(f'fit {chisq_per_dof=}')
     return {
         'f': f_opt,
@@ -146,8 +154,8 @@ def fit_mc2_curve(e2s, MC2_means, MC2_errs, *, err_rescale=1.0):
 # }
 cmap = plt.get_cmap('cividis_r')
 colors = {}
-for L in [8, 16, 32, 48, 64, 80, 96, 128, 192, 256]:
-    colors[L] = cmap(L / 256)
+for L in [8, 16, 32, 48, 64, 80, 96, 128, 192, 256, 384]:
+    colors[L] = cmap(L / 512)
 markers = {
     8: 'o',
     16: 's',
@@ -158,7 +166,8 @@ markers = {
     96: '.',
     128: 'p',
     192: 'h',
-    256: 'P'
+    256: 'P',
+    384: '>'
 }
 
 def concat_dicts(ds):
@@ -175,7 +184,7 @@ def concat_dicts(ds):
 def plot_results():
     sweep1 = (
         # np.array([8, 16, 32, 48, 64, 80, 96, 128], dtype=int),
-        np.array([32, 48, 64, 80, 96, 128]),
+        np.array([128]), # 32, 48, 64, 80, 96
         np.arange(0.30, 1.80+1e-6,  0.05),
     )
     sweep2 = (
@@ -185,7 +194,11 @@ def plot_results():
             np.arange(0.70, 1.80+1e-6, 0.10)
         ))
     )
-    all_e2 = sorted(list(set(sweep1[1]) | set(sweep2[1])))
+    sweep3 = (
+        np.array([384], dtype=int),
+        np.arange(0.30, 0.55+1e-6, 0.05)
+    )
+    all_e2 = sorted(list(set(sweep1[1]) | set(sweep2[1]) | set(sweep3[1])))
     def make_MC_bins(e2):
         peak_loc_ansatz = max(1e-3, np.sqrt(6.0)*np.exp(-3.27 / e2))
         return np.linspace(-1.5*peak_loc_ansatz, 1.5*peak_loc_ansatz, endpoint=True, num=51)
@@ -198,19 +211,24 @@ def plot_results():
     }
     MC_bins_sweep1 = [MC_bins_by_e2[e2] for e2 in sweep1[1]]
     MC_bins_sweep2 = [MC_bins_by_e2[e2] for e2 in sweep2[1]]
+    MC_bins_sweep3 = [MC_bins_by_e2[e2] for e2 in sweep3[1]]
     M_bins_sweep1 = [M_bins_by_e2[e2] for e2 in sweep1[1]]
     M_bins_sweep2 = [M_bins_by_e2[e2] for e2 in sweep2[1]]
+    M_bins_sweep3 = [M_bins_by_e2[e2] for e2 in sweep3[1]]
     traces1, hists1 = load_sweep(
         sweep1, kind='npy', M_bins=M_bins_sweep1, MC_bins=MC_bins_sweep1)
     traces2, hists2 = load_sweep(
         sweep2, kind='cpp', M_bins=M_bins_sweep2, MC_bins=MC_bins_sweep2)
+    traces3, hists3 = load_sweep(
+        sweep3, kind='cpp', M_bins=M_bins_sweep3, MC_bins=MC_bins_sweep3)
 
     ### Order param histograms
     all_bins_hists = [
         (M_bins_by_e2[e2], MC_bins_by_e2[e2],
          concat_dicts(
              [hists1[i] for i in np.flatnonzero(sweep1[1] == e2)] +
-             [hists2[i] for i in np.flatnonzero(sweep2[1] == e2)]))
+             [hists2[i] for i in np.flatnonzero(sweep2[1] == e2)] +
+             [hists3[i] for i in np.flatnonzero(sweep3[1] == e2)]))
         for e2 in all_e2
     ]
     for e2,(M_bins,MC_bins,hist) in zip(all_e2, all_bins_hists):
@@ -230,6 +248,7 @@ def plot_results():
         ax.set_xlabel(r'$\left< M \right> / V$')
         ax.legend()
         fig.savefig(f'figs/M_hist_{e2:0.2f}.pdf')
+        plt.close(fig)
         fig, ax = plt.subplots(1,1, figsize=(3.75, 3.0))
         for L, MC_hist in MC_hists:
             print('plot L =', L, np.sum(MC_hist))
@@ -244,10 +263,12 @@ def plot_results():
         ax.set_xlabel(r'$\left< M_C \right> / V$')
         ax.legend()
         fig.savefig(f'figs/MC_hist_{e2:0.2f}.pdf')
+        plt.close(fig)
 
     ### Joint order param sweep plots
     fig, axes = plt.subplots(3,3, figsize=(10,6))
-    for i,(L,trace) in enumerate(zip(sweep1[0], traces1)):
+    for i,(L,trace) in enumerate(itertools.chain(
+            zip(sweep1[0], traces1), zip(sweep2[0], traces2), zip(sweep3[0], traces3))):
         color, marker = colors[L], markers[L]
         V = L**3
         off = i*0.00
@@ -257,34 +278,53 @@ def plot_results():
         al.add_errorbar(trace['M2'] / V**2, ax=axes[2,0], **style)
         al.add_errorbar(trace['MC'], ax=axes[0,1], **style)
         al.add_errorbar(trace['MC2'] / V, ax=axes[1,1], **style)
-        al.add_errorbar(trace['MC2'] / V**2, ax=axes[2,1], **style)
+        ### FORNOW:
+        al.add_errorbar((trace['MC2'] / V**2)**trace['e2'], ax=axes[2,1], **style)
         al.add_errorbar(trace['MCsus'] / V, ax=axes[1,2], **style)
         al.add_errorbar(trace['E'] / V, ax=axes[0,2], **style)
 
-        # Fit L=128 as the "infinite volume" curve
-        if L == 128:
-            ti, tf = 4, 20
+        # Fit L=256 as the "infinite volume" curve
+        if L == 256:
+            e2i = 0.50
+            e2f = 0.80
+            inds = np.nonzero((e2i - 1e-6 <= trace['e2']) & (trace['e2'] <= e2f + 1e-6))[0]
+            print(f'{inds=}')
+            # ti, tf = np.argmax(trace['e2'] >= e2i), np.argmin(trace['e2'] <= e2f)-1
+            # print(f'{ti=} {tf=}')
             res = fit_mc2_curve(
-                trace['e2'][ti:tf], *(trace['MC2'][:,ti:tf] / V**2), err_rescale=5.0)
+                trace['e2'][inds], *(trace['MC2'][:,inds] / V**2), err_rescale=5.0, fix_ec=True)
             fit_e2s = np.linspace(np.min(trace['e2']), np.max(trace['e2']), num=100)
             fit_fs = res['f'](fit_e2s)
             A, B = res['params']
-            axes[2,1].plot(fit_e2s, fit_fs, linewidth=3, linestyle='--', color='b', alpha=0.5, zorder=3,
-                           label=rf'${A:0.2f} e^{{ -{B:0.2f} / e^2 }}$')
+            ### FORNOW:
+            fit_fs = fit_fs ** fit_e2s
+            axes[2,1].plot(
+                fit_e2s, fit_fs, linewidth=0.5, linestyle='--', color='b', alpha=0.5, zorder=3,
+                label=rf'${A:0.2f} e^{{ -{B:0.2f} / e^2 }}$')
+            res = fit_mc2_curve(
+                trace['e2'][inds], *(trace['MC2'][:,inds] / V**2), err_rescale=5.0, fix_ec=False)
+            fit_e2s = np.linspace(np.min(trace['e2']), np.max(trace['e2']), num=100)
+            fit_fs = res['f'](fit_e2s)
+            ### FORNOW:
+            fit_fs = fit_fs ** fit_e2s
+            A, B, e2c = res['params']
+            axes[2,1].plot(
+                fit_e2s, fit_fs, linewidth=0.5, linestyle='--', color='r', alpha=0.5, zorder=3,
+                label=rf'${A:0.2f} e^{{ -{B:0.2f} / (e^2 - {e2c:0.3f}) }}$')
 
-    for i,(L,trace) in enumerate(zip(sweep2[0], traces2)):
-        color, marker = colors[L], markers[L]
-        V = L**3
-        off = i*0.00
-        style = dict(xs=trace['e2'], off=off, color=color, marker=marker, fillstyle='none', markersize=6, label=rf'$L={L}$')
-        al.add_errorbar(trace['M'], ax=axes[0,0], **style)
-        al.add_errorbar(trace['M2'] / V, ax=axes[1,0], **style)
-        al.add_errorbar(trace['M2'] / V**2, ax=axes[2,0], **style)
-        al.add_errorbar(trace['MC'], ax=axes[0,1], **style)
-        al.add_errorbar(trace['MC2'] / V, ax=axes[1,1], **style)
-        al.add_errorbar(trace['MC2'] / V**2, ax=axes[2,1], **style)
-        al.add_errorbar(trace['MCsus'] / V, ax=axes[1,2], **style)
-        al.add_errorbar(trace['E'] / V, ax=axes[0,2], **style)
+    # for i,(L,trace) in enumerate(zip(sweep2[0], traces2)):
+    #     color, marker = colors[L], markers[L]
+    #     V = L**3
+    #     off = i*0.00
+    #     style = dict(xs=trace['e2'], off=off, color=color, marker=marker, fillstyle='none', markersize=6, label=rf'$L={L}$')
+    #     al.add_errorbar(trace['M'], ax=axes[0,0], **style)
+    #     al.add_errorbar(trace['M2'] / V, ax=axes[1,0], **style)
+    #     al.add_errorbar(trace['M2'] / V**2, ax=axes[2,0], **style)
+    #     al.add_errorbar(trace['MC'], ax=axes[0,1], **style)
+    #     al.add_errorbar(trace['MC2'] / V, ax=axes[1,1], **style)
+    #     al.add_errorbar(trace['MC2'] / V**2, ax=axes[2,1], **style)
+    #     al.add_errorbar(trace['MCsus'] / V, ax=axes[1,2], **style)
+    #     al.add_errorbar(trace['E'] / V, ax=axes[0,2], **style)
 
     for ax in axes[2]:
         ax.set_xlabel(r'$e^2$')
@@ -297,9 +337,10 @@ def plot_results():
     axes[1,0].set_yscale('log')
     axes[1,1].set_yscale('log')
     axes[2,0].set_ylabel(r'$\left<M^2\right> / V^2$')
-    axes[2,1].set_ylabel(r'$\left<M_C^2\right> / V^2$')
+    axes[2,1].set_ylabel(r'$(\left<M_C^2\right> / V^2)^{e^2}$')
     axes[2,0].set_yscale('log')
     axes[2,1].set_yscale('log')
+    axes[2,1].set_ylim(3e-4, 2e-1)
     axes[1,2].set_ylabel(r'$\frac{1}{V}(\left<M_C^2\right> - \left<|M_C|\right>^2)$')
 
     handles, labels = axes[2,1].get_legend_handles_labels()
@@ -307,6 +348,7 @@ def plot_results():
 
     fig.set_tight_layout(True)
     fig.savefig('figs/phase_transition_sweep2.pdf')
+    plt.close(fig)
 
 if __name__ == '__main__':
     plot_results()

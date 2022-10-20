@@ -15,8 +15,8 @@ e2 = args.e2
 L = args.L
 V = L**3
 
-E = np.fromfile(f'obs_trace_{e2:0.2f}_L{L}_cuda_E.dat')
-MC = np.fromfile(f'obs_trace_{e2:0.2f}_L{L}_cuda_MC.dat')
+E = np.fromfile(f'raw_obs/obs_trace_{e2:0.2f}_L{L}_cuda_E.dat')
+MC = np.fromfile(f'raw_obs/obs_trace_{e2:0.2f}_L{L}_cuda_MC.dat')
 
 print('<E/V> =', al.bootstrap(E / V, Nboot=1000, f=al.rmean))
 print('<MC> =', al.bootstrap(MC, Nboot=1000, f=al.rmean))
@@ -31,6 +31,7 @@ axes[1].plot(*al.bin_data(MC, binsize=100))
 axes[0].set_ylabel(r'$E$')
 axes[1].set_ylabel(r'$M_C$')
 fig.set_tight_layout(True)
+fig.savefig(f'figs/plt_{e2:0.2f}_L{L}_hist.pdf')
 
 binsizes = np.arange(20, 500, 20)
 binned_MCs = []
@@ -46,5 +47,6 @@ al.add_errorbar(binned_MC2s, xs=binsizes, ax=axes[1], off=1, marker='o', label=r
 axes[1].set_xlabel('bin size')
 fig.legend()
 fig.set_tight_layout(True)
+fig.savefig(f'figs/plt_{e2:0.2f}_L{L}_MCs.pdf')
 
-plt.show()
+# plt.show()

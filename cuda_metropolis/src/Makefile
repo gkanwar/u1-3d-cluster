@@ -1,6 +1,6 @@
 CUDA_HOME ?= /opt/cuda
 NVCC := $(CUDA_HOME)/bin/nvcc
-NVCCFLAGS :=
+NVCCFLAGS := -arch=sm_60
 ifeq ($(dbg),1)
 	NVCCFLAGS += -g -G
 else

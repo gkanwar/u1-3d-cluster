@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <curand.h>
 #include <curand_kernel.h>
+#include <cuda_profiler_api.h>
 
 #include "config.h"
 #include "util.h"
@@ -101,6 +102,7 @@ __global__ void measure_E(const int* cfg, double* E, unsigned L) {
   const unsigned int z0 = (blockIdx.x * blockDim.x + threadIdx.x) * THREAD_L;
   const unsigned int y0 = (blockIdx.y * blockDim.y + threadIdx.y) * THREAD_L;
   const unsigned int x0 = (blockIdx.z * blockDim.z + threadIdx.z) * THREAD_L;
+  double E_local = 0.0;
   for (unsigned int x = x0; x < x0+THREAD_L; ++x) {
     for (unsigned int y = y0; y < y0+THREAD_L; ++y) {
       for (unsigned int z = z0; z < z0+THREAD_L; ++z) {
@@ -108,19 +110,22 @@ __global__ void measure_E(const int* cfg, double* E, unsigned L) {
         const double h_xp = cfg[get_idx((x+1)%L, y, z, L)] / 2.0;
         const double h_yp = cfg[get_idx(x, (y+1)%L, z, L)] / 2.0;
         const double h_zp = cfg[get_idx(x, y, (z+1)%L, L)] / 2.0;
-        E[get_idx(x, y, z, L)] = (
+        // E[get_idx(x, y, z, L)] = (
+	E_local += (
             sq(h - h_xp) +
             sq(h - h_yp) +
             sq(h - h_zp) );
       }
     }
   }
+  atomicAdd(E, E_local);
 }
 
 __global__ void measure_OC(const int* cfg, double* OC, unsigned L) {
   const unsigned int z0 = (blockIdx.x * blockDim.x + threadIdx.x) * THREAD_L;
   const unsigned int y0 = (blockIdx.y * blockDim.y + threadIdx.y) * THREAD_L;
   const unsigned int x0 = (blockIdx.z * blockDim.z + threadIdx.z) * THREAD_L;
+  double OC_local = 0.0;
   for (unsigned int x = x0; x < x0+THREAD_L; ++x) {
     for (unsigned int y = y0; y < y0+THREAD_L; ++y) {
       for (unsigned int z = z0; z < z0+THREAD_L; ++z) {
@@ -133,7 +138,9 @@ __global__ void measure_OC(const int* cfg, double* OC, unsigned L) {
         const double h13 = cfg[get_idx((x+1)%L, y, (z+1)%L, L)] / 2.0;
         const double h123 = cfg[get_idx((x+1)%L, (y+1)%L, (z+1)%L, L)] / 2.0;
         const double h_bar = (h + h1 + h2 + h3 + h12 + h23 + h13 + h123) / 8.0;
-        OC[get_idx(x, y, z, L)] = (
+	const int par = (x + y + z) % 2 == 0 ? 1 : -1;
+        // OC[get_idx(x, y, z, L)] = (
+	OC_local += par * (
             sq(h - h_bar) + sq(h12 - h_bar) +
             sq(h23 - h_bar) + sq(h13 - h_bar)
             - sq(h1 - h_bar) - sq(h2 - h_bar)
@@ -141,6 +148,7 @@ __global__ void measure_OC(const int* cfg, double* OC, unsigned L) {
       }
     }
   }
+  atomicAdd(OC, OC_local);
 }
 
 __global__ void init_cfg(int* cfg, unsigned L) {
@@ -154,6 +162,10 @@ __global__ void init_cfg(int* cfg, unsigned L) {
       }
     }
   }
+}
+
+__global__ void clear_meas(double* x) {
+  *x = 0.0;
 }
 
 extern "C" int* alloc_and_init_cfg(int L, dim3 grid_shape, dim3 block_shape) {
@@ -202,11 +214,16 @@ extern "C" void run_metropolis(
   assert(L == grid_shape.z * block_shape.z * THREAD_L);
   double* d_tmp_E = NULL;
   double* d_tmp_OC = NULL;
-  checkCudaErrors(cudaMalloc((void**)&d_tmp_E, L*L*L*sizeof(double)));
-  checkCudaErrors(cudaMalloc((void**)&d_tmp_OC, L*L*L*sizeof(double)));
-  double* tmp_E =  (double*) malloc(L*L*L*sizeof(double));
-  double* tmp_OC =  (double*) malloc(L*L*L*sizeof(double));
+  // checkCudaErrors(cudaMalloc((void**)&d_tmp_E, L*L*L*sizeof(double)));
+  // checkCudaErrors(cudaMalloc((void**)&d_tmp_OC, L*L*L*sizeof(double)));
+  checkCudaErrors(cudaMalloc((void**)&d_tmp_E, sizeof(double)));
+  checkCudaErrors(cudaMalloc((void**)&d_tmp_OC, sizeof(double)));
+  // double* tmp_E =  (double*) malloc(L*L*L*sizeof(double));
+  // double* tmp_OC =  (double*) malloc(L*L*L*sizeof(double));
+  double E;
+  double MC;
 
+  cudaProfilerStart();
   for (int i = -n_therm; i < n_iter; ++i) {
 
     if ((i+1) % 1000 == 0) {
@@ -217,16 +234,26 @@ extern "C" void run_metropolis(
     metropolis_kernel<<<grid_shape, block_shape>>>(d_cfg, rng_state, e2, 1, L);
 
     if (i >= 0 && (i+1) % n_skip_meas == 0) {
-      // measure all arrays on device
+      // V1 (slow!)
+      // // measure all arrays on device
+      // measure_E<<<grid_shape, block_shape>>>(d_cfg, d_tmp_E, L);
+      // measure_OC<<<grid_shape, block_shape>>>(d_cfg, d_tmp_OC, L);
+      // checkCudaErrors(cudaDeviceSynchronize());
+
+      // // copy to host and reduce
+      // copy_dev_to_host(tmp_E, d_tmp_E, L*L*L);
+      // copy_dev_to_host(tmp_OC, d_tmp_OC, L*L*L);
+      // double E = sum_field(tmp_E, L);
+      // double MC = sum_field_staggered(tmp_OC, L);
+
+      // V2 (faster): reduce on device
+      clear_meas<<<1,1>>>(d_tmp_E);
+      clear_meas<<<1,1>>>(d_tmp_OC);
       measure_E<<<grid_shape, block_shape>>>(d_cfg, d_tmp_E, L);
       measure_OC<<<grid_shape, block_shape>>>(d_cfg, d_tmp_OC, L);
       checkCudaErrors(cudaDeviceSynchronize());
-
-      // copy to host and reduce
-      copy_dev_to_host(tmp_E, d_tmp_E, L*L*L);
-      copy_dev_to_host(tmp_OC, d_tmp_OC, L*L*L);
-      double E = sum_field(tmp_E, L);
-      double MC = sum_field_staggered(tmp_OC, L);
+      copy_dev_to_host(&E, d_tmp_E, 1);
+      copy_dev_to_host(&MC, d_tmp_OC, 1);
 
       // log history
       int meas_ind = ((i+1) / n_skip_meas) - 1;
@@ -234,9 +261,10 @@ extern "C" void run_metropolis(
       MC_hist[meas_ind] = MC;
     }
   }
+  cudaProfilerStop();
 
-  free(tmp_E);
-  free(tmp_OC);
+  // free(tmp_E);
+  // free(tmp_OC);
   checkCudaErrors(cudaFree(d_tmp_E));
   checkCudaErrors(cudaFree(d_tmp_OC));
 }

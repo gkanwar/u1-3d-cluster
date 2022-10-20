@@ -107,18 +107,20 @@ int main(int argc, char** argv) {
   free_cfg(d_cfg);
   free_rng(rng_state);
 
-  cout << E_hist[E_hist.size()-1] << "\n";
-  cout << MC_hist[MC_hist.size()-1] << "\n";
+  if (E_hist.size() > 0 && MC_hist.size() > 0) {
+    cout << E_hist[E_hist.size()-1] << "\n";
+    cout << MC_hist[MC_hist.size()-1] << "\n";
 
-  double E = sum_array(E_hist.data(), E_hist.size()) / E_hist.size();
-  cout << "Mean E/V = " << E/(L*L*L) << "\n";
-  double MC = sum_array(MC_hist.data(), MC_hist.size()) / MC_hist.size();
-  cout << "Mean MC = " << MC << "\n";
+    double E = sum_array(E_hist.data(), E_hist.size()) / E_hist.size();
+    cout << "Mean E/V = " << E/(L*L*L) << "\n";
+    double MC = sum_array(MC_hist.data(), MC_hist.size()) / MC_hist.size();
+    cout << "Mean MC = " << MC << "\n";
 
-  ofstream f1(out_prefix + "_E.dat", ios::binary);
-  write_array_to_file(E_hist, f1);
-  ofstream f2(out_prefix + "_MC.dat", ios::binary);
-  write_array_to_file(MC_hist, f2);
+    ofstream f1(out_prefix + "_E.dat", ios::binary);
+    write_array_to_file(E_hist, f1);
+    ofstream f2(out_prefix + "_MC.dat", ios::binary);
+    write_array_to_file(MC_hist, f2);
+  }
 
   return 0;
 }

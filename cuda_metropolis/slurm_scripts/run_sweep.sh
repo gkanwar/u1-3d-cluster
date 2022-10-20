@@ -9,7 +9,7 @@ L=80
 for i in "${!ALL_E2[@]}"; do
     e2="${ALL_E2[i]}"
     seed="${ALL_SEEDS[i]}"
-    ./u1_3d_cuda --n_iter=50000 --n_therm=500 --n_skip_meas=100 \
+    ./src/u1_3d_cuda --n_iter=50000 --n_therm=500 --n_skip_meas=100 \
                  --seed=$seed --e2=$e2 --L=$L \
-                 --out_prefix obs_trace_${e2}_L${L}_cuda
+                 --out_prefix raw_obs/obs_trace_${e2}_L${L}_cuda
 done

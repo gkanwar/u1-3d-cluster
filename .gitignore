@@ -7,6 +7,7 @@
 !*.sh
 !*.h
 !*.md
+!*.hxx
 !*.txt
 !Makefile
 !cuda_metropolis

@@ -4,12 +4,12 @@ NVCCFLAGS :=
 ifeq ($(dbg),1)
 	NVCCFLAGS += -g -G
 else
-	NVCCFLAGS += -DNDEBUG
+	NVCCFLAGS += -DNDEBUG -O3
 endif
 
 ALL_CCFLAGS := $(NVCCFLAGS)
 ALL_LDFLAGS := $(ALL_CCFLAGS)
-ALL_CCFLAGS += --threads 0 --std=c++11
+ALL_CCFLAGS += --threads 0 --std=c++11 -O3
 
 INCLUDES :=
 LIBRARIES := -lcurand

@@ -3,6 +3,7 @@
 ### points and extract a location of the 2nd order critical point.
 
 import analysis as al
+import functools
 import itertools
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -10,10 +11,20 @@ import numpy as np
 import scipy as sp
 import scipy.interpolate
 import scipy.optimize
+import operator
 import os
 import paper_plt
 paper_plt.load_latex_config()
 
+def load_from_raw_dat(prefix):
+    d = {}
+    d['E'] = np.fromfile(prefix + '_E.dat')
+    if os.path.exists(prefix + '_M.dat'):
+        d['M'] = np.fromfile(prefix + '_M.dat')
+    else:
+        d['M'] = np.zeros_like(d['E'])
+    d['MC'] = np.fromfile(prefix + '_MC.dat')
+    return d
 
 def load_sweep(sweep, *, kind, M_bins, MC_bins):
     Ls, e2s = sweep
@@ -50,13 +61,15 @@ def load_sweep(sweep, *, kind, M_bins, MC_bins):
                     print(f'Skipping prefix {prefix} (does not exist)')
                     continue
                 print(f'Loading prefix {prefix}...')
-                d = {}
-                d['E'] = np.fromfile(prefix + '_E.dat')
-                if os.path.exists(prefix + '_M.dat'):
-                    d['M'] = np.fromfile(prefix + '_M.dat')
-                else:
-                    d['M'] = np.zeros_like(d['E'])
-                d['MC'] = np.fromfile(prefix + '_MC.dat')
+                d = load_from_raw_dat(prefix)
+
+            elif kind == 'cuda':
+                prefix = f'cuda_metropolis/raw_obs/obs_trace_{e2:0.2f}_L{L}_cuda'
+                if not os.path.exists(prefix + '_E.dat'):
+                    print(f'Skipping prefix {prefix} (does not exist)')
+                    continue
+                print(f'Loading prefix {prefix}...')
+                d = load_from_raw_dat(prefix)
 
             else:
                 raise RuntimeError(f'unknown {kind=}')
@@ -110,20 +123,25 @@ def load_sweep(sweep, *, kind, M_bins, MC_bins):
         })
     return all_traces, all_hists
 
-def fit_mc2_curve(e2s, MC2_means, MC2_errs, *, fix_ec, err_rescale=1.0):
+def fit_mc2_curve(e2s, MC2_means, MC2_errs, *, fit_type, err_rescale=1.0):
     print(e2s)
     print(MC2_means)
     print(MC2_errs)
     MC2_errs *= err_rescale
-    g = lambda e2, A, B, e2c: A*np.exp(-B/(e2-e2c))
-    if fix_ec:
-        f = lambda e2, A, B: g(e2, A, B, 0.0)
+    if fit_type == 'fix_ec':
+        f = lambda e2, A, B: A*np.exp(-B/e2)
+        bounds = [[0.0]*2, [np.inf]*2]
+        p0 = (1.0, 1.0)
+    elif fit_type == 'free_ec':
+        f = lambda e2, A, B, e2c: A*np.exp(-B/(e2-e2c))
+        bounds = [[0.0]*3, [np.inf]*3]
+        p0 = (1.0, 1.0, 0.0)
+    elif fit_type == 'fix_ec_prefactor':
+        f = lambda e2, A, B: (A/e2)*np.exp(-B/e2)
         bounds = [[0.0]*2, [np.inf]*2]
         p0 = (1.0, 1.0)
     else:
-        f = g
-        bounds = [[0.0]*3, [np.inf]*3]
-        p0 = (1.0, 1.0, 0.0)
+        raise RuntimeError(f'unknown fit_type {fit_type}')
     popt, pcov = sp.optimize.curve_fit(
         f, e2s, MC2_means, sigma=MC2_errs, bounds=bounds, p0=p0)
     f_opt = lambda e2: f(e2, *popt)
@@ -154,7 +172,7 @@ def fit_mc2_curve(e2s, MC2_means, MC2_errs, *, fix_ec, err_rescale=1.0):
 # }
 cmap = plt.get_cmap('cividis_r')
 colors = {}
-for L in [8, 16, 32, 48, 64, 80, 96, 128, 192, 256, 384]:
+for L in [8, 16, 32, 48, 64, 80, 96, 128, 192, 256, 384, 512]:
     colors[L] = cmap(L / 512)
 markers = {
     8: 'o',
@@ -167,7 +185,8 @@ markers = {
     128: 'p',
     192: 'h',
     256: 'P',
-    384: '>'
+    384: '>',
+    512: 'o'
 }
 
 def concat_dicts(ds):
@@ -182,23 +201,34 @@ def concat_dicts(ds):
     }
 
 def plot_results():
-    sweep1 = (
-        # np.array([8, 16, 32, 48, 64, 80, 96, 128], dtype=int),
-        np.array([128]), # 32, 48, 64, 80, 96
-        np.arange(0.30, 1.80+1e-6,  0.05),
-    )
-    sweep2 = (
-        np.array([192, 256], dtype=int),
-        np.concatenate((
+    sweeps = [
+        ( # sweep 1
+            # np.array([8, 16, 32, 48, 64, 80, 96, 128], dtype=int),
+            np.array([128]), # 32, 48, 64, 80, 96
+            np.arange(0.30, 1.80+1e-6,  0.05),
+            'npy'
+        ),
+        ( # sweep 2
+            np.array([192, 256], dtype=int),
+            np.concatenate((
+                np.arange(0.30, 0.55+1e-6, 0.05),
+                np.arange(0.70, 1.80+1e-6, 0.10)
+            )),
+            'cpp'
+        ),
+        ( # sweep 3
+            np.array([384], dtype=int),
             np.arange(0.30, 0.55+1e-6, 0.05),
-            np.arange(0.70, 1.80+1e-6, 0.10)
-        ))
-    )
-    sweep3 = (
-        np.array([384], dtype=int),
-        np.arange(0.30, 0.55+1e-6, 0.05)
-    )
-    all_e2 = sorted(list(set(sweep1[1]) | set(sweep2[1]) | set(sweep3[1])))
+            'cpp'
+        ),
+        ( # sweep 4
+            np.array([512], dtype=int),
+            np.arange(0.30, 0.40+1e-6, 0.10),
+            'cuda'
+        )
+    ]
+    all_e2 = sorted(list(functools.reduce(
+        operator.or_, [set(sweep[1]) for sweep in sweeps])))
     def make_MC_bins(e2):
         peak_loc_ansatz = max(1e-3, np.sqrt(6.0)*np.exp(-3.27 / e2))
         return np.linspace(-1.5*peak_loc_ansatz, 1.5*peak_loc_ansatz, endpoint=True, num=51)
@@ -209,26 +239,33 @@ def plot_results():
     MC_bins_by_e2 = {
         e2: make_MC_bins(e2) for e2 in all_e2
     }
-    MC_bins_sweep1 = [MC_bins_by_e2[e2] for e2 in sweep1[1]]
-    MC_bins_sweep2 = [MC_bins_by_e2[e2] for e2 in sweep2[1]]
-    MC_bins_sweep3 = [MC_bins_by_e2[e2] for e2 in sweep3[1]]
-    M_bins_sweep1 = [M_bins_by_e2[e2] for e2 in sweep1[1]]
-    M_bins_sweep2 = [M_bins_by_e2[e2] for e2 in sweep2[1]]
-    M_bins_sweep3 = [M_bins_by_e2[e2] for e2 in sweep3[1]]
-    traces1, hists1 = load_sweep(
-        sweep1, kind='npy', M_bins=M_bins_sweep1, MC_bins=MC_bins_sweep1)
-    traces2, hists2 = load_sweep(
-        sweep2, kind='cpp', M_bins=M_bins_sweep2, MC_bins=MC_bins_sweep2)
-    traces3, hists3 = load_sweep(
-        sweep3, kind='cpp', M_bins=M_bins_sweep3, MC_bins=MC_bins_sweep3)
+    MC_bins_sweeps = [[MC_bins_by_e2[e2] for e2 in sweep[1]] for sweep in sweeps]
+    # MC_bins_sweep1 = [MC_bins_by_e2[e2] for e2 in sweep1[1]]
+    # MC_bins_sweep2 = [MC_bins_by_e2[e2] for e2 in sweep2[1]]
+    # MC_bins_sweep3 = [MC_bins_by_e2[e2] for e2 in sweep3[1]]
+    M_bins_sweeps = [[M_bins_by_e2[e2] for e2 in sweep[1]] for sweep in sweeps]
+    # M_bins_sweep1 = [M_bins_by_e2[e2] for e2 in sweep1[1]]
+    # M_bins_sweep2 = [M_bins_by_e2[e2] for e2 in sweep2[1]]
+    # M_bins_sweep3 = [M_bins_by_e2[e2] for e2 in sweep3[1]]
+    # traces1, hists1 = load_sweep(
+    #     sweep1, kind='npy', M_bins=M_bins_sweep1, MC_bins=MC_bins_sweep1)
+    # traces2, hists2 = load_sweep(
+    #     sweep2, kind='cpp', M_bins=M_bins_sweep2, MC_bins=MC_bins_sweep2)
+    # traces3, hists3 = load_sweep(
+    #     sweep3, kind='cpp', M_bins=M_bins_sweep3, MC_bins=MC_bins_sweep3)
+    trace_hists = [
+        load_sweep(
+            sweep[:2], kind=sweep[2], M_bins=M_bins_sweep, MC_bins=MC_bins_sweep)
+        for sweep,M_bins_sweep,MC_bins_sweep in zip(sweeps, M_bins_sweeps, MC_bins_sweeps)
+    ]
 
     ### Order param histograms
     all_bins_hists = [
         (M_bins_by_e2[e2], MC_bins_by_e2[e2],
-         concat_dicts(
-             [hists1[i] for i in np.flatnonzero(sweep1[1] == e2)] +
-             [hists2[i] for i in np.flatnonzero(sweep2[1] == e2)] +
-             [hists3[i] for i in np.flatnonzero(sweep3[1] == e2)]))
+         concat_dicts(sum([
+             [hists[i] for i in np.flatnonzero(np.isclose(sweep[1], e2))]
+             for sweep,(traces,hists) in zip(sweeps, trace_hists)
+         ], start=[])))
         for e2 in all_e2
     ]
     for e2,(M_bins,MC_bins,hist) in zip(all_e2, all_bins_hists):
@@ -268,7 +305,7 @@ def plot_results():
     ### Joint order param sweep plots
     fig, axes = plt.subplots(3,3, figsize=(10,6))
     for i,(L,trace) in enumerate(itertools.chain(
-            zip(sweep1[0], traces1), zip(sweep2[0], traces2), zip(sweep3[0], traces3))):
+            *[zip(sweep[0], traces) for sweep,(traces,_) in zip(sweeps, trace_hists)])):
         color, marker = colors[L], markers[L]
         V = L**3
         off = i*0.00
@@ -292,7 +329,8 @@ def plot_results():
             # ti, tf = np.argmax(trace['e2'] >= e2i), np.argmin(trace['e2'] <= e2f)-1
             # print(f'{ti=} {tf=}')
             res = fit_mc2_curve(
-                trace['e2'][inds], *(trace['MC2'][:,inds] / V**2), err_rescale=5.0, fix_ec=True)
+                trace['e2'][inds], *(trace['MC2'][:,inds] / V**2), err_rescale=5.0,
+                fit_type='fix_ec')
             fit_e2s = np.linspace(np.min(trace['e2']), np.max(trace['e2']), num=100)
             fit_fs = res['f'](fit_e2s)
             A, B = res['params']
@@ -302,7 +340,8 @@ def plot_results():
                 fit_e2s, fit_fs, linewidth=0.5, linestyle='--', color='b', alpha=0.5, zorder=3,
                 label=rf'${A:0.2f} e^{{ -{B:0.2f} / e^2 }}$')
             res = fit_mc2_curve(
-                trace['e2'][inds], *(trace['MC2'][:,inds] / V**2), err_rescale=5.0, fix_ec=False)
+                trace['e2'][inds], *(trace['MC2'][:,inds] / V**2), err_rescale=5.0,
+                fit_type='free_ec')
             fit_e2s = np.linspace(np.min(trace['e2']), np.max(trace['e2']), num=100)
             fit_fs = res['f'](fit_e2s)
             ### FORNOW:
@@ -347,7 +386,7 @@ def plot_results():
     axes[2,2].legend(handles, labels)
 
     fig.set_tight_layout(True)
-    fig.savefig('figs/phase_transition_sweep2.pdf')
+    fig.savefig('figs/phase_transition_sweep3.pdf')
     plt.close(fig)
 
 if __name__ == '__main__':

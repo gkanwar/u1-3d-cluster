@@ -13,47 +13,17 @@
 
 #include "cluster.h"
 #include "lattice.h"
+#include "latt_ops.h"
 #include "measurements.h"
 #include "metropolis.h"
 #include "my_rand.h"
 #include "args.hxx"
 
 constexpr int SHIFT_FREQ = 100;
-constexpr double PI = 3.141592653589793238462643383279502884197169399;
 
 using namespace std;
 using namespace std::chrono;
 constexpr double BIL = 1000000000;
-
-double sum_array(const double* arr, unsigned n) {
-  double tot = 0.0;
-  for (unsigned j = 0; j < n; ++j) {
-    tot += arr[j];
-  }
-  return tot;
-}
-
-vector<int> make_init_cfg(const latt_shape* shape) {
-  if (!shape->staggered) {
-    return vector<int>(shape->vol, 0);
-  }
-  vector<int> cfg(shape->vol);
-  for (int idx = 0; idx < shape->vol; ++idx) {
-    int tot_coord = 0;
-    for (int i = 0; i < ND; ++i) {
-      tot_coord += compute_comp(idx, i, shape);
-    }
-    cfg[idx] = tot_coord % 2;
-  }
-  return cfg;
-}
-
-void rezero_cfg(vector<int>& cfg) {
-  int x = cfg[0];
-  for (unsigned i = 0; i < cfg.size(); ++i) {
-    cfg[i] -= x;
-  }
-}
 
 void run_cluster(
     double e2, int n_iter, int n_therm, int n_skip_meas, int n_metr,
@@ -155,13 +125,6 @@ void run_cluster(
     
   }
 
-}
-
-template <typename T>
-void write_array_to_file(const vector<T>& arr, ostream &os) {
-  for (T val : arr) {
-    os.write(reinterpret_cast<char*>(&val), sizeof(val));
-  }
 }
 
 

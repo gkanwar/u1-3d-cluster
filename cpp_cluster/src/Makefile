@@ -5,16 +5,20 @@ AR := ar
 CCFLAGS := -Ofast -flto -DNDEBUG -std=c++17 -Wall -Wextra -march=native
 ARFLAGS := -rcs
 
-build: u1_3d_cluster
+build: u1_3d_cluster u1_3d_wloop
 
-MY_HEADERS = cluster.h lattice.h measurements.h metropolis.h util.h
+MY_HEADERS = cluster.h lattice.h latt_ops.h measurements.h metropolis.h util.h
 main.o: main.cpp $(MY_HEADERS) args.hxx
+	$(CXX) $(CCFLAGS) -o $@ -c $<
+main_wloop.o: main_wloop.cpp $(MY_HEADERS) args.hxx
 	$(CXX) $(CCFLAGS) -o $@ -c $<
 cluster.o: cluster.cpp $(MY_HEADERS)
 	$(CXX) $(CCFLAGS) -o $@ -c $<
 metropolis.o: metropolis.cpp $(MY_HEADERS)
 	$(CXX) $(CCFLAGS) -o $@ -c $<
 u1_3d_cluster: main.o cluster.o metropolis.o
+	$(CXX) $(CCFLAGS) -o $@ $^
+u1_3d_wloop: main_wloop.o cluster.o metropolis.o
 	$(CXX) $(CCFLAGS) -o $@ $^
 
 GTEST_DIR := gtest/googletest
@@ -46,5 +50,6 @@ tests: tests.o cluster.o $(GTEST_BUILD_DIR)/gtest_main.a
 	$(CXX) $(GTEST_CCFLAGS) -lpthread $^ -o $@
 
 clean:
-	rm -f u1_3d_cluster tests main.o metropolis.o cluster.o tests.o
+	rm -f u1_3d_cluster u1_3d_wloop tests \
+	main.o main_wloop.o metropolis.o cluster.o tests.o
 	rm -rf $(GTEST_BUILD_DIR)

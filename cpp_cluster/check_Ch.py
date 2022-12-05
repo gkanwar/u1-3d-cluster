@@ -430,10 +430,10 @@ def load_and_fit_cperiodic(L, e2s):
     
 
 def main2():
-    e2s = np.arange(0.70, 1.00+1e-6, 0.10)
-    Ls = [64] #, 96, 128, 192]
+    e2s = np.arange(0.60, 2.00+1e-6, 0.10)
+    Ls = [64, 96, 128, 192, 256]
     mass_fig, mass_ax = plt.subplots(1,1)
-    colors = ['xkcd:gray', 'xkcd:navy blue', 'xkcd:forest green', 'xkcd:red']
+    colors = ['xkcd:gray', 'xkcd:navy blue', 'xkcd:forest green', 'xkcd:red', 'xkcd:purple']
     for L,color in zip(Ls, colors):
         style = dict(markersize=6, fillstyle='none', color=color)
         res = load_and_fit_periodic(L, e2s)
@@ -452,7 +452,7 @@ def main2():
     mass_ax.set_xlabel('$e^2$')
     mass_ax.set_ylabel('$m$')
     mass_ax.legend()
-    mass_fig.savefig(f'figs/tmp_Ch_sub_mass.pdf')
+    mass_fig.savefig(f'figs/final_Ch_sub_mass.pdf')
     
     plt.show()
 

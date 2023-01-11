@@ -35,7 +35,7 @@ double metropolis_update(
   return acc;
 }
 
-double metropolis_update_wloop(
+double metropolis_update_with_wloop(
     int* cfg, double e2, my_rand &rng, const latt_shape* shape,
     const WloopShape& wloop) {
   double acc = 0.0;

@@ -25,6 +25,7 @@
 #include "args.hxx"
 
 constexpr int SHIFT_FREQ = 100;
+constexpr double SIGMA_BIAS = 0.05;
 
 using namespace std;
 using namespace std::chrono;
@@ -49,29 +50,118 @@ pair<double, double> measure_wloop_plaqs(
   return make_pair(fwd_plaq, bwd_plaq);
 }
 
+static std::uniform_int_distribution<int> offset_dist =
+    std::uniform_int_distribution<int>(0, 1);
+static std::uniform_real_distribution<double> unif_dist =
+    std::uniform_real_distribution<double>(0.0, 1.0);
+
+vector<double> compute_Wt_weights(
+    const int* cfg, double e2, const latt_shape* shape, const WloopShape& wloop) {
+  double accum_log_w = 0.0;
+  vector<double> ws(shape->dims[ND-1]+1, 0);
+  ws[0] = 1.0;
+  double tot_w = 1.0;
+  for (int t = 0; t < shape->dims[ND-1]; ++t) {
+    const int x = get_site_idx(wloop.x, 0, t, shape);
+    const int y = get_site_idx(wloop.x, 1, t, shape);
+    const double hx = cfg[x] / 2.0;
+    const double hy = cfg[y] / 2.0;
+    accum_log_w += -e2*(hy - hx + 0.5) + SIGMA_BIAS;
+    ws[t+1] = exp(accum_log_w);
+    tot_w += ws[t+1];
+  }
+  for (int t = 0; t <= shape->dims[ND-1]; ++t) {
+    ws[t] /= tot_w;
+  }
+  return ws;
+}
+
+// Update the Wilson loop shape in the background of a config
+bool metropolis_update_wloop(
+    const int* cfg, double e2, my_rand &rng, const latt_shape* shape, WloopShape& wloop) {
+  const int dt = 2*offset_dist(rng) - 1;
+  if (wloop.t + dt < 0 || wloop.t + dt > shape->dims[ND-1]) {
+    return false;
+  }
+  const int plaq_t = (dt > 0) ? wloop.t : (wloop.t-1);
+  const int x = get_site_idx(wloop.x, 0, plaq_t, shape);
+  const int y = get_site_idx(wloop.x, 1, plaq_t, shape);
+  const double hx = cfg[x] / 2.0;
+  const double hy = cfg[y] / 2.0;
+  const double weight = exp(dt * (-e2*(hy - hx + 0.5) + SIGMA_BIAS));
+  if (unif_dist(rng) < weight) {
+    wloop.t += dt;
+    return true;
+  }
+  else {
+    return false;
+  }
+}
+
+void heatbath_update_wloop(
+    const int* cfg, double e2, my_rand &rng, const latt_shape* shape, WloopShape& wloop) {
+  const vector<double> ws = compute_Wt_weights(cfg, e2, shape, wloop);
+  const double r = unif_dist(rng);
+  double tot_w = 0.0;
+  for (int t = 0; t <= shape->dims[ND-1]; ++t) {
+    tot_w += ws[t];
+    if (r <= tot_w) {
+      wloop.t = t;
+      break;
+    }
+  }
+}
+
+void update_Wt_hist_v1(
+    vector<double> &Wt_hist, [[maybe_unused]] const int* cfg,
+    [[maybe_unused]] double e2, [[maybe_unused]] const latt_shape* shape,
+    const WloopShape& wloop) {
+  Wt_hist[wloop.t] += 1;
+}
+
+void update_Wt_hist_v2(
+    vector<double> &Wt_hist, const int* cfg, double e2,
+    const latt_shape* shape, const WloopShape& wloop) {
+  const vector<double> ws = compute_Wt_weights(cfg, e2, shape, wloop);
+  for (int t = 0; t <= shape->dims[ND-1]; ++t) {
+    Wt_hist[t] += ws[t];
+  }
+}
+
 void run_wloop_sim(
     double e2, int n_iter, int n_therm, int n_bin_meas,
     my_rand& rng, const latt_shape* shape, WloopShape wloop,
     vector<double> &E_hist, vector<double> &M_hist,
     vector<double> &MT_hist, vector<double> &MC_hist,
-    vector<double> &hsq_hist, vector<double> &Pf_hist,
-    vector<double> &Pb_hist) {
+    vector<double> &hsq_hist, vector<double> &Wt_hist) {
+    // vector<double> &Pf_hist, vector<double> &Pb_hist
 
   vector<int> cfg = make_init_cfg(shape);
-  double Pf_bin = 0.0;
-  double Pb_bin = 0.0;
+  // double Pf_bin = 0.0;
+  // double Pb_bin = 0.0;
+  vector<double> Wt_hist_bin(shape->dims[ND-1]+1);
 
   auto _tot_start = steady_clock::now();
 
   for (int i = -n_therm; i < n_iter; ++i) {
     // metropolis update
     auto _start = steady_clock::now();
-    cout << "Metropolis...\n";
-    double acc = metropolis_update_wloop(cfg.data(), e2, rng, shape, wloop);
-    cout << "\tacc = " << acc << "\n";
-    cout << "TIME metropolis update "
-         << (steady_clock::now() - _start).count() / BIL << "\n";
-
+    double acc = metropolis_update_with_wloop(cfg.data(), e2, rng, shape, wloop);
+    // bool updated = metropolis_update_wloop(cfg.data(), e2, rng, shape, wloop);
+    bool updated = true;
+    heatbath_update_wloop(cfg.data(), e2, rng, shape, wloop);
+    if ((i+1) % 1000 == 0) {
+      cout << (i+1) << " / " << n_iter << "\n";
+      cout << "Metropolis...\n";
+      cout << "\tacc = " << acc << "\n";
+      cout << "\twloop updated: " << updated << "\n";
+      cout << "TIME metropolis update "
+           << (steady_clock::now() - _start).count() / BIL << "\n";
+      double _tot_time = (steady_clock::now() - _tot_start).count() / BIL;
+      cout << "EST TIME "
+           << _tot_time << " of " << (_tot_time * (n_therm+n_iter))/(n_therm+i+1) << "\n";
+    }
+      
     // re-zero cfg periodically, if periodic BCs
     if (!shape->cper && (i+1) % SHIFT_FREQ == 0) {
       rezero_cfg(cfg);
@@ -79,13 +169,14 @@ void run_wloop_sim(
 
     // measurements
     if (i >= 0) {
-      const auto [fwd_plaq, bwd_plaq] =
-          measure_wloop_plaqs(cfg.data(), e2, shape, wloop);
-      Pf_bin += fwd_plaq / n_bin_meas;
-      Pb_bin += bwd_plaq / n_bin_meas;
+      // const auto [fwd_plaq, bwd_plaq] =
+      //     measure_wloop_plaqs(cfg.data(), e2, shape, wloop);
+      // Pf_bin += fwd_plaq / n_bin_meas;
+      // Pb_bin += bwd_plaq / n_bin_meas;
+
+      update_Wt_hist_v2(Wt_hist_bin, cfg.data(), e2, shape, wloop);
       
       if ((i+1) % n_bin_meas == 0) {
-        cout << (i+1) << " / " << n_iter << "\n";
         const double E = measure_E(cfg.data(), shape);
         const double M = measure_M(cfg.data(), shape);
         const double MT = measure_MT(cfg.data(), shape);
@@ -97,23 +188,28 @@ void run_wloop_sim(
         MT_hist[meas_ind] = MT;
         MC_hist[meas_ind] = MC;
         hsq_hist[meas_ind] = hsq;
-        Pf_hist[meas_ind] = Pf_bin;
-        Pb_hist[meas_ind] = Pb_bin;
-        Pf_bin = 0.0;
-        Pb_bin = 0.0;
+        std::copy(
+            Wt_hist_bin.begin(),
+            Wt_hist_bin.end(),
+            Wt_hist.begin() + meas_ind * Wt_hist_bin.size());
+        std::fill(Wt_hist_bin.begin(), Wt_hist_bin.end(), 0);
+        // Pf_hist[meas_ind] = Pf_bin;
+        // Pb_hist[meas_ind] = Pb_bin;
+        // Pf_bin = 0.0;
+        // Pb_bin = 0.0;
+        
       }
     }
-
-    cout << "TIME total "
-         << (steady_clock::now() - _tot_start).count() / BIL << "\n";
     
   }
 
+  cout << "TIME total "
+       << (steady_clock::now() - _tot_start).count() / BIL << "\n";
 }
 
 
 int main(int argc, char** argv) {
-  args::ArgumentParser parser("U(1) cluster in C++");
+  args::ArgumentParser parser("U(1) Wilson loop (Snake) in C++");
   args::ValueFlag<int> flag_n_iter(
       parser, "n_iter", "Number of MC iters", {"n_iter"},
       args::Options::Required);
@@ -193,11 +289,12 @@ int main(int argc, char** argv) {
   vector<double> MT_hist(n_meas);
   vector<double> MC_hist(n_meas);
   vector<double> hsq_hist(n_meas);
-  vector<double> Pf_hist(n_meas);
-  vector<double> Pb_hist(n_meas);
+  // vector<double> Pf_hist(n_meas);
+  // vector<double> Pb_hist(n_meas);
+  vector<double> Wt_hist(n_meas * (shape.dims[ND-1]+1));
   run_wloop_sim(
       e2, n_iter, n_therm, n_bin_meas, rng, &shape, wloop,
-      E_hist, M_hist, MT_hist, MC_hist, hsq_hist, Pf_hist, Pb_hist);
+      E_hist, M_hist, MT_hist, MC_hist, hsq_hist, Wt_hist); // Pf_hist, Pb_hist);
 
   double E = sum_array(E_hist.data(), E_hist.size()) / E_hist.size();
   cout << "Mean E/V = " << (E/shape.vol) << "\n";
@@ -208,9 +305,29 @@ int main(int argc, char** argv) {
   double MC = sum_array(MC_hist.data(), MC_hist.size()) / MC_hist.size();
   cout << "Mean MC = " << MC << "\n";
 
-  double Pf = sum_array(Pf_hist.data(), Pf_hist.size()) / Pf_hist.size();
-  double Pb = sum_array(Pb_hist.data(), Pb_hist.size()) / Pb_hist.size();
-  cout << "sigma(Pf) = " << -log(Pf) << ", sigma(Pb) = " << log(Pb) << "\n";
+  // double Pf = sum_array(Pf_hist.data(), Pf_hist.size()) / Pf_hist.size();
+  // double Pb = sum_array(Pb_hist.data(), Pb_hist.size()) / Pb_hist.size();
+  // cout << "sigma(Pf) = " << -log(Pf) << ", sigma(Pb) = " << log(Pb) << "\n";
+  vector<double> check_Wt_hist(shape.dims[ND-1]+1);
+  int tot = 0;
+  for (int i = 0; i < n_meas; ++i) {
+    for (int j = 0; j <= shape.dims[ND-1]; ++j) {
+      double count = Wt_hist[i * (shape.dims[ND-1]+1) + j];
+      check_Wt_hist[j] += count;
+      tot += count;
+    }
+  }
+  cout << "Wt hist =";
+  for (int j = 0; j <= shape.dims[ND-1]; ++j) {
+    cout << " " << check_Wt_hist[j] / ((double)tot);
+  }
+  cout << "\n";
+  cout << "sigma =";
+  for (int j = 0; j < shape.dims[ND-1]; ++j) {
+    cout << " ";
+    cout << log(check_Wt_hist[j] / ((double)check_Wt_hist[j+1])) + SIGMA_BIAS;
+  }
+  cout << "\n";
 
   {
     ofstream f(out_prefix + "_E.dat", ios::binary);
@@ -232,13 +349,17 @@ int main(int argc, char** argv) {
     ofstream f(out_prefix + "_hsq.dat", ios::binary);
     write_array_to_file(hsq_hist, f);
   }
+  // {
+  //   ofstream f(out_prefix + "_Pf.dat", ios::binary);
+  //   write_array_to_file(Pf_hist, f);
+  // }
+  // {
+  //   ofstream f(out_prefix + "_Pb.dat", ios::binary);
+  //   write_array_to_file(Pb_hist, f);
+  // }
   {
-    ofstream f(out_prefix + "_Pf.dat", ios::binary);
-    write_array_to_file(Pf_hist, f);
-  }
-  {
-    ofstream f(out_prefix + "_Pb.dat", ios::binary);
-    write_array_to_file(Pb_hist, f);
+    ofstream f(out_prefix + "_Wt_hist.dat", ios::binary);
+    write_array_to_file(Wt_hist, f);
   }
 
   return 0;

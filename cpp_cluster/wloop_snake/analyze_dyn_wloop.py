@@ -71,6 +71,14 @@ fit_sigma_eff_luscher = make_fitter(
     p0=[np.pi/24, 0.01],
     bounds=[[-np.inf, 0.0], [np.inf, np.inf]],
     maxfev=10000)
+fit_sigma_eff_power = make_fitter(
+    lambda r, sigma, beta, gamma: sigma + gamma*(np.exp(-beta*(r+1))/np.sqrt(r+1) - np.exp(-beta*r)/np.sqrt(r)),
+    lambda r, sigma, beta, gamma: sigma*r + gamma*np.exp(-beta*r)/np.sqrt(r),
+    ['sigma', 'beta', 'gamma'],
+    p0=[0.01, 0.1, 0.0],
+    bounds=[[0.0, 0.0, -np.inf], [np.inf, np.inf, np.inf]],
+    maxfev=10000)
+    
     
 
 def main1():
@@ -166,13 +174,20 @@ def make_plots_for_e2_sweep(e2, *, L, xs, global_ax, fit_kind, **extra_style):
         print(f'Fit L={L} with 1-exp: params {pdict}')
         fit_str = (
             f'${pdict["sigma"]:0.4f} + {pdict["alpha"]:0.4f} '
-            f'\exp(-{pdict["beta"]:0.4f} r)$')
+            rf'\exp(-{pdict["beta"]:0.4f} r)$')
     elif fit_kind == 'luscher':
         res = fit_sigma_eff_luscher(xs_fit_input, ys_fit_input)
         pdict = res['pdict']
         print(f'Fit L={L} with luscher: params {pdict}')
         fit_str = (
             f'${pdict["sigma"]:0.4f} + {pdict["gamma"]:0.4f}/(r(r+1))$')
+    elif fit_kind == 'power':
+        res = fit_sigma_eff_power(xs_fit_input, ys_fit_input)
+        pdict = res['pdict']
+        print(f'Fit L={L} with power: params {pdict}')
+        fit_str = (
+            rf'${pdict["sigma"]:0.4f} + {pdict["gamma"]:0.4f}'
+            rf'\exp(-{pdict["beta"]:0.4f} r)/\sqrt{{r}}$')
     else:
         raise RuntimeError(f'unknown {fit_kind=}')
     al.add_errorbar(trace, xs=xs, ax=global_ax, **style, label=f'$e^2={e2:0.1f}$ data')
@@ -327,6 +342,7 @@ if __name__ == '__main__':
     # main1()
     # main2(fit_kind='1exp')
     # main2(fit_kind='luscher')
-    for e2 in [0.6, 0.7, 0.8, 0.9, 1.0]:
-        main3(e2, fit_kind='1exp')
-        main3(e2, fit_kind='luscher')
+    main2(fit_kind='power')
+    # for e2 in [0.6, 0.7, 0.8, 0.9, 1.0]:
+    #     main3(e2, fit_kind='1exp')
+    #     main3(e2, fit_kind='luscher')

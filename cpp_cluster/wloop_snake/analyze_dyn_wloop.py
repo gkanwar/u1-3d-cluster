@@ -148,9 +148,9 @@ def main1():
     ax1.legend()
     ax2.legend()
     ax3.legend()
-    fig1.savefig(f'figs/compare_{e2:0.1f}_wloops.pdf')
-    fig2.savefig(f'compare_{e2:0.1f}_sigma_xt.pdf')
-    fig3.savefig(f'compare_{e2:0.1f}_sigma_x.pdf')
+    fig1.savefig(f'{figs_prefix}/compare_{e2:0.1f}_wloops.pdf')
+    fig2.savefig(f'{figs_prefix}/compare_{e2:0.1f}_sigma_xt.pdf')
+    fig3.savefig(f'{figs_prefix}/compare_{e2:0.1f}_sigma_x.pdf')
 
 def make_plots_for_e2_sweep(e2, *, L, xs, global_ax, fit_kind, **extra_style):
     fig1, ax1 = plt.subplots(1,1)
@@ -200,8 +200,8 @@ def make_plots_for_e2_sweep(e2, *, L, xs, global_ax, fit_kind, **extra_style):
 
     ax1.legend()
     ax2.legend()
-    fig1.savefig(f'compare_{e2:0.1f}_wloops.pdf')
-    fig2.savefig(f'compare_{e2:0.1f}_sigma_xt.pdf')
+    fig1.savefig(f'{figs_prefix}/compare_{e2:0.1f}_wloops.pdf')
+    fig2.savefig(f'{figs_prefix}/compare_{e2:0.1f}_sigma_xt.pdf')
     plt.close(fig1)
     plt.close(fig2)
 

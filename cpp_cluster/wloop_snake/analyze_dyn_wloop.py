@@ -8,7 +8,7 @@ paper_plt.load_latex_config()
 import scipy as sp
 import scipy.optimize
 
-BIAS = 0.05
+BIAS = 0.03
 raw_data_prefix = 'raw_obs_v2'
 data_prefix = 'data'
 figs_prefix = 'figs'
@@ -21,7 +21,7 @@ def measure_log_ratio(Wt_hist_cfgs):
     Wt_hist = al.rmean(Wt_hist_cfgs)
     return np.log(Wt_hist[0]) - np.log(Wt_hist[-1])
 
-def load_data(L, e2, x, version, *, BIAS=0.05):
+def load_data(L, e2, x, version, *, BIAS=BIAS):
     Wt_hist = np.fromfile(
         f'{raw_data_prefix}/dyn_wloop_v{version}_stag_L{L}_{e2:.1f}_x{x}_Wt_hist.dat', dtype=np.float64
     ).reshape(-1, L+1)

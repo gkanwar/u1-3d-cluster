@@ -20,7 +20,8 @@ using namespace std;
 TEST(LatticeTest, IdxToCoord){
   array<int,ND> dims{4, 6, 8};
   const bool cper = false;
-  const latt_shape shape = make_latt_shape(&dims.front(), cper);
+  const bool stag = false;
+  const latt_shape shape = make_latt_shape(&dims.front(), cper, stag);
   for (int x = 0; x < shape.vol; ++x) {
     for (int i = 0; i < ND; ++i) {
       for (int diff = -1; diff <= 1; diff += 2) {
@@ -46,7 +47,8 @@ TEST(LatticeTest, IdxToCoord){
 TEST(LatticeTest, IdxToCoordCper){
   array<int,ND> dims{4, 6, 8};
   const bool cper = true;
-  const latt_shape shape = make_latt_shape(&dims.front(), cper);
+  const bool stag = false;
+  const latt_shape shape = make_latt_shape(&dims.front(), cper, stag);
   for (int x = 0; x < shape.vol; ++x) {
     for (int i = 0; i < ND; ++i) {
       for (int diff = -1; diff <= 1; diff += 2) {

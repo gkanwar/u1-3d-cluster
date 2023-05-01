@@ -26,7 +26,7 @@ def load_data(L, e2, x, version, *, BIAS=BIAS):
         f'{raw_data_prefix}/dyn_wloop_v{version}_stag_L{L}_{e2:.1f}_x{x}_Wt_hist.dat', dtype=np.float64
     ).reshape(-1, L+1)
     Wt_hist *= np.exp(-BIAS*np.arange(L+1))
-    Wt_hist_bin = al.bin_data(Wt_hist, binsize=100)[1]
+    xs_bin, Wt_hist_bin = al.bin_data(Wt_hist, binsize=100)
     Wt_est = al.bootstrap(Wt_hist_bin, Nboot=1000, f=al.rmean)
     sigma = al.bootstrap(Wt_hist_bin, Nboot=1000, f=sigma_eff)
     ratio = al.bootstrap(Wt_hist_bin, Nboot=1000, f=measure_log_ratio)
@@ -34,7 +34,9 @@ def load_data(L, e2, x, version, *, BIAS=BIAS):
     return {
         'Wt': Wt_est,
         'sigma': sigma,
-        'ratio': ratio
+        'ratio': ratio,
+        'mcmc_trace_0': (xs_bin, Wt_hist_bin[:,0]),
+        'mcmc_trace_m1': (xs_bin, Wt_hist_bin[:,-1])
     }
 
 def make_fitter(f, g, pnames, **extra_kwargs):
@@ -153,20 +155,45 @@ def main1():
     fig3.savefig(f'{figs_prefix}/compare_{e2:0.1f}_sigma_x.pdf')
 
 def make_plots_for_e2_sweep(e2, *, L, xs, global_ax, fit_kind, **extra_style):
-    fig1, ax1 = plt.subplots(1,1)
+    fig1, axes1 = plt.subplots(2,1, figsize=(6, 8), tight_layout=True)
     fig2, ax2 = plt.subplots(1,1)
+    ncols3 = 4
+    nrows3 = 1+(len(xs)-1)//ncols3
+    fig3, axes3 = plt.subplots(
+        nrows3, ncols3, figsize=(9, 2*nrows3), gridspec_kw=dict(
+            hspace=0.01, wspace=0.05
+        ))
     style = dict(markersize=4, fillstyle='none', linestyle='', **extra_style)
 
     trace = []
-    for x in xs:
+    cmap = plt.get_cmap('viridis')
+    colors = cmap(np.arange(len(xs))/len(xs))
+    for x,color,ax3 in zip(xs, colors, axes3.flatten()):
         res = load_data(L=L, e2=e2, x=x, version=2)
+        ax3.plot(*res['mcmc_trace_0'], linestyle='-', marker='', color='b')
+        ax3.plot(*res['mcmc_trace_m1'], linestyle='-', marker='', color='r')
+        ax3.set_xticks([])
+        ax3.set_yscale('log')
+        # ax3.set_yticks([])
+        ax3.text(0.1, 0.9, f'$x={x}$', ha='left', va='top', transform=ax3.transAxes)
         ratio = res['ratio']
         trace.append(ratio)
-        al.add_errorbar(res['Wt'], ax=ax1, label=f'L={L}, ratio={ratio[0]:.3f}+/-{ratio[1]:.3f}')
+        al.add_errorbar(
+            res['Wt'], ax=axes1[0],
+            label=rf'$L={L}$, $100\Delta f = {100*ratio[0]:.2f}({int(10000*ratio[1])})$',
+            color=color
+        )
+        al.add_errorbar(
+            (res['Wt'][0]*np.exp(BIAS*np.arange(L+1)),
+             res['Wt'][1]*np.exp(BIAS*np.arange(L+1))),
+            ax=axes1[1], color=color)
+        # al.add_errorbar(res['Wt'], ax=ax1, label=f'L={L}, ratio={ratio[0]:.3f}+/-{ratio[1]:.3f}')
         al.add_errorbar(res['sigma'], ax=ax2, label=f'L={L}')
     trace = np.transpose(trace)
-    xs_fit_input = xs[1:]
-    ys_fit_input = trace[:,1:]
+    fit_min = 8
+    fit_max = L//2-4
+    xs_fit_input = xs[fit_min:fit_max+1]
+    ys_fit_input = trace[:,fit_min:fit_max+1]
     xs_fit = np.linspace(6, 36, num=100)
     if fit_kind == '1exp':
         res = fit_sigma_eff_1exp(xs_fit_input, ys_fit_input)
@@ -190,6 +217,7 @@ def make_plots_for_e2_sweep(e2, *, L, xs, global_ax, fit_kind, **extra_style):
             rf'\exp(-{pdict["beta"]:0.4f} r)/\sqrt{{r}}$')
     else:
         raise RuntimeError(f'unknown {fit_kind=}')
+    global_ax.axvspan(fit_min-0.25, fit_max+0.25, color='0.9', ec='none')
     al.add_errorbar(trace, xs=xs, ax=global_ax, **style, label=f'$e^2={e2:0.1f}$ data')
     fit_color = style['color'] if 'color' in style else 'k'
     global_ax.plot(
@@ -198,12 +226,16 @@ def make_plots_for_e2_sweep(e2, *, L, xs, global_ax, fit_kind, **extra_style):
             f'$e^2={e2:0.1f}$ fit: {fit_str} '
             f'[chisq/dof={res["chisq_per_dof"]:.2f}]'))
 
-    ax1.legend()
-    ax2.legend()
+    axes1[0].legend(ncol=2)
+    axes1[0].text(0.2, 0.9, 'Reweighted', transform=axes1[0].transAxes)
+    axes1[1].text(0.2, 0.9, 'Unweighted', transform=axes1[1].transAxes)
+    ax2.legend(ncol=2)
     fig1.savefig(f'{figs_prefix}/compare_{e2:0.1f}_wloops.pdf')
     fig2.savefig(f'{figs_prefix}/compare_{e2:0.1f}_sigma_xt.pdf')
+    fig3.savefig(f'{figs_prefix}/compare_{e2:0.1f}_mcmc.pdf')
     plt.close(fig1)
     plt.close(fig2)
+    plt.close(fig3)
 
 def make_plots_for_e2_integrated_E(
         e2, *, L, xmin, xmax, global_ax1, global_ax2, fit_kind, **extra_style):
@@ -295,15 +327,17 @@ def main2(*, fit_kind):
     fig, ax = plt.subplots(1,1, figsize=(8,4))
     cmap = plt.get_cmap('RdBu')
     e2_style = {
-        0.8: dict(color=cmap(0.1), marker='o'),
-        0.9: dict(color=cmap(0.3), marker='s'),
-        1.0: dict(color=cmap(0.4), marker='v'),
-        1.1: dict(color=cmap(0.6), marker='^'),
-        1.2: dict(color=cmap(0.7), marker='p'),
-        1.3: dict(color=cmap(0.9), marker='h'),
-        1.4: dict(color=cmap(1.0), marker='*')
+        0.6: dict(color=cmap(0.1), marker='o'),
+        # 0.7: dict(color=cmap(0.2), marker='s'),
+        # 0.8: dict(color=cmap(0.3), marker='v'),
+        # 0.9: dict(color=cmap(0.4), marker='^'),
+        # 1.0: dict(color=cmap(0.5), marker='x'),
+        # 1.1: dict(color=cmap(0.6), marker='d'),
+        # 1.2: dict(color=cmap(0.7), marker='p'),
+        # 1.3: dict(color=cmap(0.9), marker='h'),
+        # 1.4: dict(color=cmap(1.0), marker='*')
     }
-    xs = np.arange(4, 32+1, 2)
+    xs = np.arange(0, 32+1, 1)
     L = 64
     for e2,style in e2_style.items():
         make_plots_for_e2_sweep(
@@ -340,9 +374,9 @@ if __name__ == '__main__':
     os.makedirs(figs_prefix, exist_ok=True)
     os.makedirs(data_prefix, exist_ok=True)
     # main1()
-    # main2(fit_kind='1exp')
+    main2(fit_kind='1exp')
     # main2(fit_kind='luscher')
-    main2(fit_kind='power')
+    # main2(fit_kind='power')
     # for e2 in [0.6, 0.7, 0.8, 0.9, 1.0]:
     #     main3(e2, fit_kind='1exp')
     #     main3(e2, fit_kind='luscher')

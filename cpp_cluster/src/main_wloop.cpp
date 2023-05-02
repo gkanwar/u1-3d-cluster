@@ -25,7 +25,7 @@
 #include "args.hxx"
 
 constexpr int SHIFT_FREQ = 100;
-constexpr double SIGMA_BIAS = 0.03;
+constexpr double SIGMA_BIAS = 0.01;
 
 using namespace std;
 using namespace std::chrono;

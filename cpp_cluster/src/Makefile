@@ -2,7 +2,8 @@ all: build
 
 CXX := g++
 AR := ar
-CCFLAGS := -Ofast -flto -DNDEBUG -std=c++17 -Wall -Wextra -march=native
+CCFLAGS := -DNDEBUG -std=c++17 -Wall -Wextra -march=native -Ofast -flto
+# CCFLAGS := -DNDEBUG -std=c++17 -Wall -Wextra -march=native -Ofast -g
 ARFLAGS := -rcs
 
 build: u1_3d_cluster u1_3d_wloop

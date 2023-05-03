@@ -38,7 +38,10 @@ inline int compute_comp(int idx, int ax, const latt_shape* shape) {
 }
 
 inline int boundary_sign(int idx, int diff, int ax, const latt_shape* shape) {
-  if (shape->cper && ax != (ND-1) &&
+  if (!shape->cper) {
+    return 1;
+  }
+  if (ax != (ND-1) &&
       (diff + compute_comp(idx, ax, shape) >= shape->dims[ax] ||
        diff + compute_comp(idx, ax, shape) < 0 )) {
     return -1;
@@ -56,6 +59,12 @@ inline std::pair<int,int> shift_site_idx(int idx, int diff, int ax, const latt_s
   int full_block_idx = idx - (idx % shape->blocks[ax]);
   int new_idx = ((idx + diff*shape->strides[ax]) % shape->blocks[ax]) + full_block_idx;
   return std::make_pair(new_idx, sign);
+}
+inline std::pair<int,int> shift_fwd(int idx, int ax, const latt_shape* shape) {
+  return shift_site_idx(idx, 1, ax, shape);
+}
+inline std::pair<int,int> shift_bwd(int idx, int ax, const latt_shape* shape) {
+  return shift_site_idx(idx, -1, ax, shape);
 }
 
 inline int get_bond_idx(int site_idx, int mu, [[maybe_unused]] const latt_shape* shape) {

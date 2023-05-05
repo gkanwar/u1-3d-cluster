@@ -26,13 +26,15 @@ inline void __checkCudaErrors(cudaError err, const char *file, const int line) {
 }
 
 extern "C" int* alloc_and_init_cfg(int L, dim3 grid_shape, dim3 block_shape);
+extern "C" int* alloc_and_init_wloop(int wloop_x, int L);
 extern "C" void free_cfg(int* d_cfg);
 extern "C" curandState* init_rng(unsigned long seed, dim3 grid_shape, dim3 block_shape);
 extern "C" void free_rng(curandState* rng_state);
-extern "C" void run_metropolis(
-    int* d_cfg, double e2, int L, int n_iter, int n_therm, int n_skip_meas,
+extern "C" void run_snake_metropolis(
+    int* d_cfg, int* d_wloop, double e2, int L,
+    int n_iter, int n_therm, int n_skip_meas,
     dim3 grid_shape, dim3 block_shape, curandState* rng_state,
-    double* E_hist, double* MC_hist);
+    double* E_hist, double* MC_hist, double* Wt_hist);
 
 void write_array_to_file(const vector<double>& arr, ostream &os) {
   for (double val : arr) {
@@ -127,8 +129,8 @@ int main(int argc, char** argv) {
   free_rng(rng_state);
 
   if (E_hist.size() > 0 && MC_hist.size() > 0) {
-    cout << E_hist[E_hist.size()-1] << "\n";
-    cout << MC_hist[MC_hist.size()-1] << "\n";
+    cout << "Last E = " << E_hist[E_hist.size()-1] << "\n";
+    cout << "Last MC = " << MC_hist[MC_hist.size()-1] << "\n";
 
     double E = sum_array(E_hist.data(), E_hist.size()) / E_hist.size();
     cout << "Mean E/V = " << E/(L*L*L) << "\n";

@@ -124,7 +124,7 @@ __global__ void metropolis_snake_kernel(
         double h_ym = cfg[get_idx(x, (y+L-1)%L, z, L)] / 2.0;
         const double h_zp = cfg[get_idx(x, y, (z+1)%L, L)] / 2.0;
         const double h_zm = cfg[get_idx(x, y, (z+L-1)%L, L)] / 2.0;
-        if (x < wloop_x || x == wloop_x && z < wloop-t) {
+        if (x < wloop_x || x == wloop_x && z < wloop_t) {
           if (y == 0) {
             h_yp += 1;
           }
@@ -153,7 +153,7 @@ __device__ void compute_Wt_weights(
   double accum_log_w = 0.0;
   ws[0] = 1.0;
   double tot_w = 1.0;
-  for (int z = 0; z < L; ++t) {
+  for (int z = 0; z < L; ++z) {
     const unsigned int x = get_idx(wloop_x, 0, z, L);
     const unsigned int y = get_idx(wloop_x, 1, z, L);
     const double hx = cfg[x] / 2.0;
@@ -176,7 +176,7 @@ __global__ void heatbath_wloop_kernel(
   const double r = get_rand_float(thread_rng_state);
   double tot_w = 0.0;
   for (int z = 0; z <= L; ++z) {
-    tot_w += ws[t];
+    tot_w += Wt_weights[z];
     if (tot_w >= r) {
       wloop[1] = z;
       break;
@@ -391,6 +391,8 @@ extern "C" void run_snake_metropolis(
   assert(L == grid_shape.z * block_shape.z * THREAD_L);
   double* d_tmp_E = NULL;
   double* d_tmp_OC = NULL;
+  double* d_tmp_Wt = NULL;
+  double* d_Wt_weights = NULL;
   checkCudaErrors(cudaMalloc((void**)&d_tmp_E, sizeof(double)));
   checkCudaErrors(cudaMalloc((void**)&d_tmp_OC, sizeof(double)));
   checkCudaErrors(cudaMalloc((void**)&d_tmp_Wt, (L+1)*sizeof(double)));
@@ -448,6 +450,7 @@ extern "C" void run_snake_metropolis(
   checkCudaErrors(cudaFree(d_tmp_E));
   checkCudaErrors(cudaFree(d_tmp_OC));
   checkCudaErrors(cudaFree(d_tmp_Wt));
+  checkCudaErrors(cudaFree(d_Wt_weights));
 }
 
 

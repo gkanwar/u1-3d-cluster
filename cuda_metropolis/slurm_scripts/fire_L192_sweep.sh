@@ -1,6 +1,6 @@
 #!/bin/bash
 
-export L=64
+export L=192
 export n_iter=1000000
 export n_therm=10000
 export n_skip_meas=100

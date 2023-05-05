@@ -41,18 +41,28 @@ void write_array_to_file(const vector<double>& arr, ostream &os) {
 }
 
 int main(int argc, char** argv) {
-  args::ArgumentParser parser("U(1) metropolis on CUDA");
+  args::ArgumentParser parser("U(1) Snake metropolis on CUDA");
   args::ValueFlag<int> flag_n_iter(
-      parser, "n_iter", "Number of Metropolis iters", {"n_iter"}, args::Options::Required);
+      parser, "n_iter", "Number of Metropolis iters", {"n_iter"},
+      args::Options::Required);
   args::ValueFlag<int> flag_n_therm(
-      parser, "n_therm", "Number of thermalization iters", {"n_therm"}, args::Options::Required);
+      parser, "n_therm", "Number of thermalization iters", {"n_therm"},
+      args::Options::Required);
   args::ValueFlag<int> flag_n_skip_meas(
-      parser, "n_skip_meas", "Number of iters between measurements", {"n_skip_meas"}, args::Options::Required);
-  args::ValueFlag<int> flag_seed(parser, "seed", "RNG seed", {"seed"}, args::Options::Required);
-  args::ValueFlag<double> flag_e2(parser, "e2", "Coupling squared", {"e2"}, args::Options::Required);
-  args::ValueFlag<int> flag_L(parser, "L", "Lattice side length", {"L"}, args::Options::Required);
-  args::ValueFlag<string> flag_out_prefix(parser, "out_prefix", "Output file prefix", {"out_prefix"}, args::Options::Required);
-
+      parser, "n_skip_meas", "Number of iters between measurements",
+      {"n_skip_meas"}, args::Options::Required);
+  args::ValueFlag<int> flag_seed(
+      parser, "seed", "RNG seed", {"seed"}, args::Options::Required);
+  args::ValueFlag<double> flag_e2(
+      parser, "e2", "Coupling squared", {"e2"}, args::Options::Required);
+  args::ValueFlag<int> flag_L(
+      parser, "L", "Lattice side length", {"L"}, args::Options::Required);
+  args::ValueFlag<int> flag_wloop_x(
+      parser, "x", "Wilson loop x", {"x"}, args::Options::Required);
+  args::ValueFlag<string> flag_out_prefix(
+      parser, "out_prefix", "Output file prefix", {"out_prefix"},
+      args::Options::Required);
+  
   try {
     parser.ParseCLI(argc, argv);
   }
@@ -76,6 +86,7 @@ int main(int argc, char** argv) {
   const int n_iter = args::get(flag_n_iter);
   const int n_therm = args::get(flag_n_therm);
   const int n_skip_meas = args::get(flag_n_skip_meas);
+  const int wloop_x = args::get(flag_wloop_x);
   const unsigned long seed = args::get(flag_seed);
   const int thread_block_size = 4;
   const string out_prefix = args::get(flag_out_prefix);
@@ -86,10 +97,15 @@ int main(int argc, char** argv) {
 
   curandState* rng_state = init_rng(seed, grid_shape, block_shape);
   int* d_cfg = alloc_and_init_cfg(L, grid_shape, block_shape);
-  vector<double> E_hist(n_iter / n_skip_meas);
-  vector<double> MC_hist(n_iter / n_skip_meas);
-  run_metropolis(d_cfg, e2, L, n_iter, n_therm, n_skip_meas, grid_shape, block_shape, rng_state,
-                 E_hist.data(), MC_hist.data());
+  int* d_wloop = alloc_and_init_wloop(wloop_x, L);
+  const int n_meas = n_iter / n_skip_meas;
+  vector<double> E_hist(n_meas);
+  vector<double> MC_hist(n_meas);
+  vector<double> Wt_hist(n_meas * (L+1));
+  run_snake_metropolis(
+      d_cfg, d_wloop, e2, L, n_iter, n_therm, n_skip_meas,
+      grid_shape, block_shape, rng_state,
+      E_hist.data(), MC_hist.data(), Wt_hist.data());
   checkCudaErrors(cudaDeviceSynchronize());
 
   /// TMP:
@@ -105,7 +121,8 @@ int main(int argc, char** argv) {
   //   cout << "\n";
   // }
   // cout << "\n";
-  
+
+  free_cfg(d_wloop);
   free_cfg(d_cfg);
   free_rng(rng_state);
 
@@ -122,6 +139,23 @@ int main(int argc, char** argv) {
     write_array_to_file(E_hist, f1);
     ofstream f2(out_prefix + "_MC.dat", ios::binary);
     write_array_to_file(MC_hist, f2);
+  }
+  if (Wt_hist.size() > 0) {
+    vector<double> mean_Wt_hist(L+1);
+    for (int i = 0; i < n_meas; ++i) {
+      for (int j = 0; j < L+1; ++j) {
+        mean_Wt_hist[j] += Wt_hist[i*(L+1) + j] / n_meas;
+      }
+    }
+    cout << "Mean Wt hist = ";
+    for (int j = 0; j < L+1; ++j) {
+      if (j > 0) cout << " ";
+      cout << mean_Wt_hist[j];
+    }
+    cout << "\n";
+
+    ofstream f(out_prefix + "_Wt_hist.dat", ios::binary);
+    write_array_to_file(Wt_hist, f);
   }
 
   return 0;

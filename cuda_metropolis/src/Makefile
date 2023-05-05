@@ -17,14 +17,19 @@ LIBRARIES := -lcurand
 
 all: build
 
-build: u1_3d_cuda
+build: u1_3d_cuda u1_3d_wloop_cuda
 
 main.o: main.cpp config.h util.h args.hxx
+	$(NVCC) $(INCLUDES) $(ALL_CCFLAGS) -o $@ -c $<
+main_wloop.o: main_wloop.cpp config.h util.h args.hxx
 	$(NVCC) $(INCLUDES) $(ALL_CCFLAGS) -o $@ -c $<
 metropolis.o: metropolis.cu config.h util.h
 	$(NVCC) $(INCLUDES) $(ALL_CCFLAGS) -o $@ -c $<
 u1_3d_cuda: main.o metropolis.o
 	$(NVCC) $(ALL_LDFLAGS) -o $@ $+ $(LIBRARIES)
+u1_3d_wloop_cuda: main_wloop.o metropolis.o
+	$(NVCC) $(ALL_LDFLAGS) -o $@ $+ $(LIBRARIES)
 
 clean:
-	rm -f u1_3d_cuda main.o metropolis.o
+	rm -f u1_3d_cuda u1_3d_wloop_cuda \
+	main.o main_wloop.o metropolis.o

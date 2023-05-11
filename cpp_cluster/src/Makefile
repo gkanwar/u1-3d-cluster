@@ -4,16 +4,23 @@ CXX := g++
 AR := ar
 # CCFLAGS := -DNDEBUG -std=c++17 -Wall -Wextra -march=native -Ofast -flto
 CCFLAGS := -DNDEBUG -std=c++17 -Wall -Wextra -march=native -Ofast -flto -g
+CCFLAGS += -DLATT_SIZE=$(LATT_SIZE)
+ifdef CPER
+	CCFLAGS += -DCPER
+endif
+ifdef STAG
+	CCFLAGS += -DSTAG
+endif
 ARFLAGS := -rcs
 
-build: u1_3d_cluster u1_3d_wloop
+build: u1_3d_cluster u1_3d_wloop_L$(LATT_SIZE)
 
 MY_HEADERS = \
 	cluster.h lattice.h latt_ops.h measurements.h \
 	metropolis.h my_rand.h util.h
 main.o: main.cpp $(MY_HEADERS) args.hxx
 	$(CXX) $(CCFLAGS) -o $@ -c $<
-main_wloop.o: main_wloop.cpp $(MY_HEADERS) args.hxx
+main_wloop_L$(LATT_SIZE).o: main_wloop.cpp $(MY_HEADERS) args.hxx
 	$(CXX) $(CCFLAGS) -o $@ -c $<
 main_prof.o: main_prof.cpp $(MY_HEADERS) args.hxx
 	$(CXX) $(CCFLAGS) -o $@ -c $<
@@ -23,7 +30,7 @@ metropolis.o: metropolis.cpp $(MY_HEADERS)
 	$(CXX) $(CCFLAGS) -o $@ -c $<
 u1_3d_cluster: main.o cluster.o metropolis.o
 	$(CXX) $(CCFLAGS) -o $@ $^
-u1_3d_wloop: main_wloop.o cluster.o metropolis.o
+u1_3d_wloop_L$(LATT_SIZE): main_wloop_L$(LATT_SIZE).o
 	$(CXX) $(CCFLAGS) -o $@ $^
 u1_3d_prof: main_prof.o
 	$(CXX) $(CCFLAGS) -o $@ $^
@@ -59,6 +66,6 @@ tests: tests.o cluster.o $(GTEST_BUILD_DIR)/gtest_main.a
 	$(CXX) $(GTEST_CCFLAGS) -lpthread $^ -o $@
 
 clean:
-	rm -f u1_3d_cluster u1_3d_wloop u1_3d_prof tests \
-	main.o main_wloop.o main_prof.o metropolis.o cluster.o tests.o
+	rm -f u1_3d_cluster u1_3d_wloop_* u1_3d_prof tests \
+	main.o main_wloop_*.o main_prof.o metropolis.o cluster.o tests.o
 	rm -rf $(GTEST_BUILD_DIR)

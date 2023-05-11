@@ -5,9 +5,9 @@
 #include "my_rand.h"
 #include "util.h"
 
-double metropolis_update(
-    int* cfg, double e2, my_rand &rng, const latt_shape* shape);
-double metropolis_update_with_wloop(
-    int* cfg, double e2, my_rand &rng, const latt_shape* shape, const WloopShape& wloop);
+float_t metropolis_update(
+    cfg_t* cfg, float_t e2, my_rand &rng, const latt_shape* shape);
+float_t metropolis_update_with_wloop(
+    cfg_t* cfg, float_t e2, my_rand &rng, const latt_shape* shape, const WloopShape& wloop);
 
 #endif

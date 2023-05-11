@@ -20,25 +20,25 @@ static std::uniform_real_distribution<double> unif_dist =
 // }
 
 static bool sample_bond(
-    int cfg_x, int cfg_y, int cfg_star, double e2, my_rand& rng) {
-  const double h_star = cfg_star / 2.0;
-  const double hx = cfg_x / 2.0;
-  const double hy = cfg_y / 2.0;
+    int cfg_x, int cfg_y, cfg_t cfg_star, float_t e2, my_rand& rng) {
+  const double h_star = cfg_star;
+  const double hx = cfg_x;
+  const double hy = cfg_y;
   const double R = exp(-2.0*e2*(h_star - hx)*(h_star - hy));
   return unif_dist(rng) < (1.0 - R);
 }
 static bool sample_bond_cper(
-    int cfg_x, int cfg_y, [[maybe_unused]] int cfg_star, double e2, my_rand& rng) {
+    int cfg_x, int cfg_y, [[maybe_unused]] cfg_t cfg_star, float_t e2, my_rand& rng) {
   // C-per clusters only valid for flips about 0
   assert(cfg_star == 0);
-  const double hx = cfg_x / 2.0;
-  const double hy = -cfg_y / 2.0; // C flip through boundary
+  const double hx = cfg_x;
+  const double hy = -cfg_y; // C flip through boundary
   const double R = exp(-2.0*e2*hx*hy);
   return unif_dist(rng) < (1.0 - R);
 }
 
 std::vector<int> flip_clusters(
-    int* cfg, int cfg_star, double e2,
+    cfg_t* cfg, cfg_t cfg_star, float_t e2,
     my_rand &rng, const latt_shape* shape) {
   int cur_label = 0;
   std::vector<int> labels(shape->vol, 0);
@@ -107,14 +107,14 @@ std::vector<int> flip_clusters(
 }
 
 // void sample_bonds(
-//     const int* cfg, int* bonds, double e2, double h_star,
+//     const cfg_t* cfg, int* bonds, float_t e2, double h_star,
 //     my_rand& rng, const latt_shape* shape) {
 //   // NOTE: Old and does not support C-per boundaries
 //   for (int x = 0; x < shape->vol; ++x) {
-//     const double hx = cfg[x] / 2.0;
+//     const double hx = cfg[x];
 //     for (int i = 0; i < ND; ++i) {
 //       const int x_fwd = shift_site_idx(x, 1, i, shape);
-//       const double hy = cfg[x_fwd] / 2.0;
+//       const double hy = cfg[x_fwd];
 //       const double R = exp(-2.0*e2*(h_star - hx)*(h_star - hy));
 //       bonds[get_bond_idx(x, i, shape)] = (int)(unif_dist(rng) < (1.0 - R));
 //     }

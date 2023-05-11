@@ -4,14 +4,15 @@
 #include <cassert>
 #include "lattice.h"
 #include "my_rand.h"
+#include "util.h"
 
 
 std::vector<int> flip_clusters(
-    int* cfg, int cfg_star, double e2,
+    cfg_t* cfg, cfg_t cfg_star, float_t e2,
     my_rand &rng, const latt_shape* shape);
 
-void sample_bonds(
-    const int* cfg, int* bonds, double e2, double h_star,
-    my_rand& rng, const latt_shape* shape);
+// void sample_bonds(
+//     const cfg_t* cfg, int* bonds, float_t e2, double h_star,
+//     my_rand& rng, const latt_shape* shape);
 
 #endif

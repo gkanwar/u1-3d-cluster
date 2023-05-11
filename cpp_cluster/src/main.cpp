@@ -26,7 +26,7 @@ using namespace std::chrono;
 constexpr double BIL = 1000000000;
 
 void run_cluster(
-    double e2, int n_iter, int n_therm, int n_skip_meas, int n_metr,
+    float_t e2, int n_iter, int n_therm, int n_skip_meas, int n_metr,
     my_rand& rng, const latt_shape* shape,
     vector<double> &E_hist, vector<double> &M_hist,
     vector<double> &MT_hist, vector<double> &MC_hist,
@@ -34,7 +34,7 @@ void run_cluster(
     vector<cdouble> &Ch_mom_hist, vector<cdouble> &Ch_mom1_hist,
     vector<int> &cluster_histogram) {
 
-  vector<int> cfg = make_init_cfg(shape);
+  vector<cfg_t> cfg = make_init_hx(shape);
 
   uniform_int_distribution<int> site_dist =
       uniform_int_distribution<int>(0, shape->vol-1);
@@ -48,12 +48,12 @@ void run_cluster(
 
   for (int i = -n_therm; i < n_iter; ++i) {
     // cluster update
-    int cfg_star = 0;
+    cfg_t cfg_star = 0;
     if (!shape->cper) {
       const int site = site_dist(rng); // rng() % shape->vol
       cfg_star = cfg[site];
       if (!shape->staggered) {
-        cfg_star += offset_dist(rng);
+        cfg_star += offset_dist(rng) / 2.0;
       }
     }
     
@@ -173,7 +173,7 @@ int main(int argc, char** argv) {
   }
 
   const int L = args::get(flag_L);
-  const double e2 = args::get(flag_e2);
+  const float_t e2 = args::get(flag_e2);
   const int n_iter = args::get(flag_n_iter);
   const int n_therm = args::get(flag_n_therm);
   const int n_skip_meas = args::get(flag_n_skip_meas);

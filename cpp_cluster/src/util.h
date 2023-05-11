@@ -5,6 +5,9 @@
 #include <iostream>
 #include <vector>
 
+using float_t = float;
+using cfg_t = float;
+
 inline double sq(double x) {
   return x*x;
 }

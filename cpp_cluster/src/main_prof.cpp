@@ -29,8 +29,8 @@
 using namespace std;
 using namespace std::chrono;
 constexpr double BIL = 1000000000;
-using my_float = float;
-using t_cfg = float;
+// using float_t = float;
+// using cfg_t = float;
 
 /// Metropolis code for profiling
 static std::bernoulli_distribution binary_dist;
@@ -51,10 +51,10 @@ inline int shift_bwd_2(int idx, int ax, const latt_shape* shape) {
 inline static int offset_dist(my_rand &rng) {
   return 2*binary_dist(rng)-1;
 }
-my_float metropolis_update(
-    t_cfg* cfg, my_float e2, my_rand &rng) {
-  my_float acc = 0.0;
-  const int L = 96;
+float_t metropolis_update(
+    cfg_t* cfg, float_t e2, my_rand &rng) {
+  float_t acc = 0.0;
+  const int L = 64;
   const latt_shape _shape{
     .dims = {L, L, L},
     .strides = {L*L, L, 1},
@@ -67,11 +67,11 @@ my_float metropolis_update(
   for (int x = 0; x < shape->vol; ++x) {
     // const int cfg_x = cfg[x];
     // const int cfg_x_p = cfg_x + 2*offset_dist(rng);
-    // const my_float hx = cfg_x / 2.0;
-    // const my_float hx_p = cfg_x_p / 2.0;
-    const my_float hx = cfg[x];
-    const my_float hx_p = hx + offset_dist(rng);
-    my_float neighbors = 0.0;
+    // const float_t hx = cfg_x / 2.0;
+    // const float_t hx_p = cfg_x_p / 2.0;
+    const float_t hx = cfg[x];
+    const float_t hx_p = hx + offset_dist(rng);
+    float_t neighbors = 0.0;
     for (int i = 0; i < ND; ++i) {
       // V1
       // const auto [x_fwd, sx_fwd] = shift_site_idx(x, 1, i, shape);
@@ -90,15 +90,15 @@ my_float metropolis_update(
       const int x_fwd = shift_fwd_2(x, i, shape);
       const int x_bwd = shift_bwd_2(x, i, shape);
       
-      // const my_float hx_fwd = cfg[x_fwd] / 2.0;
-      // const my_float hx_bwd = cfg[x_bwd] / 2.0;
-      const my_float hx_fwd = cfg[x_fwd];
-      const my_float hx_bwd = cfg[x_bwd];
+      // const float_t hx_fwd = cfg[x_fwd] / 2.0;
+      // const float_t hx_bwd = cfg[x_bwd] / 2.0;
+      const float_t hx_fwd = cfg[x_fwd];
+      const float_t hx_bwd = cfg[x_bwd];
       neighbors += hx_fwd + hx_bwd;
     }
     // dS *= (e2/2);
     // assert(e2*(ND*(sq(hx_p) - sq(hx)) + (hx - hx_p)*neighbors) == dS);
-    const my_float dS = e2*(ND*(sq(hx_p) - sq(hx)) + (hx - hx_p)*neighbors);
+    const float_t dS = e2*(ND*(sq(hx_p) - sq(hx)) + (hx - hx_p)*neighbors);
 
     if (unif_dist(rng) < exp(-dS)) {
       cfg[x] = hx_p;
@@ -111,13 +111,9 @@ my_float metropolis_update(
 
 
 void run_metropolis_sim(
-    my_float e2, int n_iter, my_rand& rng, const latt_shape* shape) {
+    float_t e2, int n_iter, my_rand& rng, const latt_shape* shape) {
 
-  vector<int> _cfg = make_init_cfg(shape);
-  vector<my_float> cfg(_cfg.size());
-  for (int i = 0; i < cfg.size(); ++i) {
-    cfg[i] = _cfg[i] / 2.0;
-  }
+  vector<cfg_t> cfg = make_init_hx(shape);
 
   auto _tot_start = steady_clock::now();
 
@@ -176,7 +172,7 @@ int main(int argc, char** argv) {
   }
 
   const int L = args::get(flag_L);
-  const my_float e2 = args::get(flag_e2);
+  const float_t e2 = args::get(flag_e2);
   const int n_iter = args::get(flag_n_iter);
   const unsigned long seed = args::get(flag_seed);
   const bool cper = args::get(flag_cper);

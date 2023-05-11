@@ -1,15 +1,20 @@
 import analysis as al
+import itertools
 import matplotlib
 import matplotlib.pyplot as plt
+import matplotlib.transforms as mtransforms
+import matplotlib.style as mstyle
 import numpy as np
 import os
 import paper_plt
-paper_plt.load_latex_config()
+# paper_plt.load_latex_config()
+paper_plt.load_basic_config()
 import scipy as sp
 import scipy.optimize
+import tqdm
 
-BIAS = 0.03
-raw_data_prefix = 'raw_obs_v2'
+BIAS = 0.01
+raw_data_prefix = 'raw_obs'
 data_prefix = 'data'
 figs_prefix = 'figs'
 
@@ -21,22 +26,27 @@ def measure_log_ratio(Wt_hist_cfgs):
     Wt_hist = al.rmean(Wt_hist_cfgs)
     return np.log(Wt_hist[0]) - np.log(Wt_hist[-1])
 
-def load_data(L, e2, x, version, *, BIAS=BIAS):
-    Wt_hist = np.fromfile(
-        f'{raw_data_prefix}/dyn_wloop_v{version}_stag_L{L}_{e2:.1f}_x{x}_Wt_hist.dat', dtype=np.float64
-    ).reshape(-1, L+1)
-    Wt_hist *= np.exp(-BIAS*np.arange(L+1))
-    xs_bin, Wt_hist_bin = al.bin_data(Wt_hist, binsize=100)
-    Wt_est = al.bootstrap(Wt_hist_bin, Nboot=1000, f=al.rmean)
-    sigma = al.bootstrap(Wt_hist_bin, Nboot=1000, f=sigma_eff)
+def load_data(L, e2, x, *, tag, bias=BIAS, binsize=100):
+    prefix = (
+        f'{raw_data_prefix}_{tag}_bias{bias:.02f}/'
+        f'dyn_wloop_{tag}_stag_L{L}_{e2:.1f}_x{x}' )
+    Wt_hist = np.fromfile(f'{prefix}_Wt_hist.dat')
+    Wt_hist = Wt_hist.reshape(-1, L+1)
+    Wt_hist *= np.exp(-bias*np.arange(L+1))
+    xs_bin, Wt_hist_bin = al.bin_data(Wt_hist, binsize=binsize)
+    Wt_est = al.bootstrap(Wt_hist_bin, Nboot=100, f=al.rmean)
+    sigma = al.bootstrap(Wt_hist_bin, Nboot=100, f=sigma_eff)
     ratio = al.bootstrap(Wt_hist_bin, Nboot=1000, f=measure_log_ratio)
     ratio = (ratio[0]/L, ratio[1]/L)
+    MC_hist = np.fromfile(f'{prefix}_MC.dat')
+    xs_bin_MC, MC_hist_bin = al.bin_data(MC_hist, binsize=binsize)
     return {
         'Wt': Wt_est,
         'sigma': sigma,
         'ratio': ratio,
         'mcmc_trace_0': (xs_bin, Wt_hist_bin[:,0]),
-        'mcmc_trace_m1': (xs_bin, Wt_hist_bin[:,-1])
+        'mcmc_trace_m1': (xs_bin, Wt_hist_bin[:,-1]),
+        'mcmc_trace_MC': (xs_bin_MC, MC_hist_bin)
     }
 
 def make_fitter(f, g, pnames, **extra_kwargs):
@@ -83,6 +93,7 @@ fit_sigma_eff_power = make_fitter(
     
     
 
+"""
 def main1():
     e2 = 1.0
     
@@ -95,7 +106,7 @@ def main1():
     L = 96
     xs = np.array([4,6,8,10,12,14,16,18,20,22,24,26])
     for x in xs:
-        res = load_data(L=L, e2=e2, x=x, version=2)
+        res = load_data(L=L, e2=e2, x=x, tag='v2')
         ratio = res['ratio']
         trace.append(ratio)
         al.add_errorbar(res['Wt'], ax=ax1, label=f'L={L}, ratio={ratio[0]:.3f}+/-{ratio[1]:.3f}')
@@ -111,7 +122,7 @@ def main1():
     L = 64
     xs = np.array([6,7,8,9,10,12,14,16,18,20,22,24,26,28,30,32])
     for x in xs:
-        res = load_data(L=L, e2=e2, x=x, version=2)
+        res = load_data(L=L, e2=e2, x=x, tag='v2')
         ratio = res['ratio']
         trace.append(ratio)
         al.add_errorbar(res['Wt'], ax=ax1, label=f'L={L}, ratio={ratio[0]:.3f}+/-{ratio[1]:.3f}')
@@ -127,7 +138,7 @@ def main1():
     L = 32
     xs = np.array([6,7,8,9])
     for x in xs:
-        res = load_data(L=L, e2=e2, x=x, version=2)
+        res = load_data(L=L, e2=e2, x=x, tag='v2')
         ratio = res['ratio']
         trace.append(ratio)
         al.add_errorbar(res['Wt'], ax=ax1, label=f'L={L}, ratio={ratio[0]:.3f}+/-{ratio[1]:.3f}')
@@ -139,7 +150,7 @@ def main1():
     L = 16
     xs = np.array([6])
     for x in xs:
-        res = load_data(L=L, e2=e2, x=x, version=2)
+        res = load_data(L=L, e2=e2, x=x, tag='v2')
         ratio = res['ratio']
         trace.append(ratio)
         al.add_errorbar(res['Wt'], ax=ax1, label=f'L={L}, ratio={ratio[0]:.3f}+/-{ratio[1]:.3f}')
@@ -153,48 +164,67 @@ def main1():
     fig1.savefig(f'{figs_prefix}/compare_{e2:0.1f}_wloops.pdf')
     fig2.savefig(f'{figs_prefix}/compare_{e2:0.1f}_sigma_xt.pdf')
     fig3.savefig(f'{figs_prefix}/compare_{e2:0.1f}_sigma_x.pdf')
+"""
 
-def make_plots_for_e2_sweep(e2, *, L, xs, global_ax, fit_kind, **extra_style):
-    fig1, axes1 = plt.subplots(2,1, figsize=(6, 8), tight_layout=True)
+def make_plots_for_e2_sweep(e2, *, L, xs, global_ax, fit_kind, tag='v2', **extra_style):
+    fig1, ax1 = plt.subplots(1,1, figsize=(6, 4))
     fig2, ax2 = plt.subplots(1,1)
     ncols3 = 4
-    nrows3 = 1+(len(xs)-1)//ncols3
+    nrows3 = 2*(1+(len(xs)-1)//ncols3)
     fig3, axes3 = plt.subplots(
         nrows3, ncols3, figsize=(9, 2*nrows3), gridspec_kw=dict(
             hspace=0.01, wspace=0.05
         ))
-    style = dict(markersize=4, fillstyle='none', linestyle='', **extra_style)
+    style = dict(
+        markersize=2, capsize=3, fillstyle='none', linestyle='',
+        linewidth=0.5*paper_plt.pix_to_pt, elinewidth=0.5*paper_plt.pix_to_pt,
+        **extra_style)
 
+    trace_xs = []
     trace = []
     cmap = plt.get_cmap('viridis')
     colors = cmap(np.arange(len(xs))/len(xs))
-    for x,color,ax3 in zip(xs, colors, axes3.flatten()):
-        res = load_data(L=L, e2=e2, x=x, version=2)
-        ax3.plot(*res['mcmc_trace_0'], linestyle='-', marker='', color='b')
-        ax3.plot(*res['mcmc_trace_m1'], linestyle='-', marker='', color='r')
-        ax3.set_xticks([])
-        ax3.set_yscale('log')
-        # ax3.set_yticks([])
-        ax3.text(0.1, 0.9, f'$x={x}$', ha='left', va='top', transform=ax3.transAxes)
-        ratio = res['ratio']
-        trace.append(ratio)
-        al.add_errorbar(
-            res['Wt'], ax=axes1[0],
-            label=rf'$L={L}$, $100\Delta f = {100*ratio[0]:.2f}({int(10000*ratio[1])})$',
-            color=color
-        )
-        al.add_errorbar(
-            (res['Wt'][0]*np.exp(BIAS*np.arange(L+1)),
-             res['Wt'][1]*np.exp(BIAS*np.arange(L+1))),
-            ax=axes1[1], color=color)
-        # al.add_errorbar(res['Wt'], ax=ax1, label=f'L={L}, ratio={ratio[0]:.3f}+/-{ratio[1]:.3f}')
-        al.add_errorbar(res['sigma'], ax=ax2, label=f'L={L}')
+    for i,(x,color) in tqdm.tqdm(list(enumerate(zip(xs, colors)))):
+        try:
+            res = load_data(L=L, e2=e2, x=x, tag=tag)
+            ax3a, ax3b = axes3.flatten()[2*i:2*i+2]
+            ax3a.plot(*res['mcmc_trace_0'], linestyle='-', marker='', color='b')
+            ax3a.plot(*res['mcmc_trace_m1'], linestyle='-', marker='', color='r')
+            ax3b.plot(*res['mcmc_trace_MC'], linestyle='-', marker='', color='xkcd:forest green')
+            ax3a.set_xticks([])
+            ax3b.set_xticks([])
+            ax3a.set_yscale('log')
+            # ax3a.set_yticks([])
+            ax3a.text(0.1, 0.9, f'$x={x}$', ha='left', va='top', transform=ax3a.transAxes)
+            ratio = res['ratio']
+            trace.append(ratio)
+            trace_xs.append(x)
+            Wt_mean, Wt_err = res['Wt']
+            Wt_plot_bias = (np.log(Wt_mean[0]) - np.log(Wt_mean[-1])) / L
+            Wt_mean *= np.exp(Wt_plot_bias*np.arange(L+1))
+            Wt_err *= np.exp(Wt_plot_bias*np.arange(L+1))
+            Wt_plot_norm = np.mean(Wt_mean)
+            Wt_mean /= Wt_plot_norm
+            Wt_err /= Wt_plot_norm
+            al.add_errorbar(
+                (Wt_mean, Wt_err),
+                label=rf'$L={L}$, $100\Delta f = {100*ratio[0]:.2f}({int(10000*ratio[1])})$',
+                ax=ax1, color=color, linestyle='')
+            # al.add_errorbar(res['Wt'], ax=ax1, label=f'L={L}, ratio={ratio[0]:.3f}+/-{ratio[1]:.3f}')
+            al.add_errorbar(res['sigma'], ax=ax2, label=f'L={L}')
+        except FileNotFoundError:
+            pass
+    if len(trace_xs) == 0:
+        return
     trace = np.transpose(trace)
-    fit_min = 8
-    fit_max = L//2-4
-    xs_fit_input = xs[fit_min:fit_max+1]
-    ys_fit_input = trace[:,fit_min:fit_max+1]
-    xs_fit = np.linspace(6, 36, num=100)
+    trace_xs = np.array(trace_xs)
+    fit_min = max(8, np.min(trace_xs))
+    fit_max = L//2
+    fit_inds, = np.nonzero((trace_xs >= fit_min) & (trace_xs <= fit_max))
+    xs_fit_input = trace_xs[fit_inds]
+    ys_fit_input = trace[:,fit_inds]
+    print(f'{xs_fit_input.shape=} {ys_fit_input.shape=} {trace.shape=}')
+    xs_plot_fit = np.linspace(fit_min-4, L//2+4, num=100)
     if fit_kind == '1exp':
         res = fit_sigma_eff_1exp(xs_fit_input, ys_fit_input)
         pdict = res['pdict']
@@ -218,21 +248,25 @@ def make_plots_for_e2_sweep(e2, *, L, xs, global_ax, fit_kind, **extra_style):
     else:
         raise RuntimeError(f'unknown {fit_kind=}')
     global_ax.axvspan(fit_min-0.25, fit_max+0.25, color='0.9', ec='none')
-    al.add_errorbar(trace, xs=xs, ax=global_ax, **style, label=f'$e^2={e2:0.1f}$ data')
+    al.add_errorbar(trace, xs=trace_xs, ax=global_ax, **style, label=f'$e^2={e2:0.1f}$ data')
     fit_color = style['color'] if 'color' in style else 'k'
     global_ax.plot(
-        xs_fit, res['f'](xs_fit), color=fit_color, linewidth=0.5,
+        xs_plot_fit, res['f'](xs_plot_fit), color=fit_color, linewidth=0.5,
         label=(
             f'$e^2={e2:0.1f}$ fit: {fit_str} '
             f'[chisq/dof={res["chisq_per_dof"]:.2f}]'))
 
-    axes1[0].legend(ncol=2)
-    axes1[0].text(0.2, 0.9, 'Reweighted', transform=axes1[0].transAxes)
-    axes1[1].text(0.2, 0.9, 'Unweighted', transform=axes1[1].transAxes)
+    fig1.legend(*ax1.get_legend_handles_labels(), loc='center left',
+                bbox_to_anchor=[1.01, 0.5], ncol=2)
     ax2.legend(ncol=2)
-    fig1.savefig(f'{figs_prefix}/compare_{e2:0.1f}_wloops.pdf')
-    fig2.savefig(f'{figs_prefix}/compare_{e2:0.1f}_sigma_xt.pdf')
-    fig3.savefig(f'{figs_prefix}/compare_{e2:0.1f}_mcmc.pdf')
+    print('Save fig 1...')
+    fig1.savefig(
+        f'{figs_prefix}/compare_L{L}_{e2:0.1f}_wloops.pdf')
+    print('Save fig 2...')
+    fig2.savefig(f'{figs_prefix}/compare_L{L}_{e2:0.1f}_sigma_xt.pdf')
+    print('Save fig 3...')
+    # fig3.savefig(
+    #     f'{figs_prefix}/compare_L{L}_{e2:0.1f}_mcmc.pdf')
     plt.close(fig1)
     plt.close(fig2)
     plt.close(fig3)
@@ -249,7 +283,7 @@ def make_plots_for_e2_integrated_E(
     trace_E = []
     E = (0.0, 0.0)
     for x in xs:
-        res = load_data(L=L, e2=e2, x=x, version=2)
+        res = load_data(L=L, e2=e2, x=x, tag='v2')
         ratio = res['ratio']
         trace.append(ratio)
         trace_E.append(E)
@@ -323,31 +357,32 @@ def make_plots_for_e2_integrated_E(
             f'[chisq/dof={res["chisq_per_dof"]:.2f}]'))
 
 
-def main2(*, fit_kind):
-    fig, ax = plt.subplots(1,1, figsize=(8,4))
-    cmap = plt.get_cmap('RdBu')
+def main2(*, fit_kind, L, tag):
+    cmap = plt.get_cmap('viridis')
     e2_style = {
         0.6: dict(color=cmap(0.1), marker='o'),
-        # 0.7: dict(color=cmap(0.2), marker='s'),
-        # 0.8: dict(color=cmap(0.3), marker='v'),
-        # 0.9: dict(color=cmap(0.4), marker='^'),
-        # 1.0: dict(color=cmap(0.5), marker='x'),
-        # 1.1: dict(color=cmap(0.6), marker='d'),
-        # 1.2: dict(color=cmap(0.7), marker='p'),
-        # 1.3: dict(color=cmap(0.9), marker='h'),
-        # 1.4: dict(color=cmap(1.0), marker='*')
+        0.7: dict(color=cmap(0.2), marker='s'),
+        0.8: dict(color=cmap(0.3), marker='v'),
+        0.9: dict(color=cmap(0.4), marker='^'),
+        1.0: dict(color=cmap(0.5), marker='x'),
+        1.1: dict(color=cmap(0.6), marker='d'),
+        1.2: dict(color=cmap(0.7), marker='p'),
+        1.3: dict(color=cmap(0.9), marker='h'),
+        1.4: dict(color=cmap(1.0), marker='*')
     }
-    xs = np.arange(0, 32+1, 1)
-    L = 64
+    xs = np.arange(0, L//2+1, 1)
+    fig, ax = plt.subplots(1,1, figsize=(8,4))
     for e2,style in e2_style.items():
         make_plots_for_e2_sweep(
-            e2, L=L, xs=xs, global_ax=ax, fit_kind=fit_kind, **style)
+            e2, L=L, xs=xs, global_ax=ax, fit_kind=fit_kind, tag=tag, **style)
     ax.set_xlabel(r'$r$')
-    ax.set_xlim(-0.2, 40)
-    ax.set_ylim(0, 0.05)
+    ax.set_xlim(24, L//2+4)
+    ax.set_ylim(0, 0.01)
     ax.legend(ncol=2)
-    ax.text(0.02, 0.98, f'Fit kind: {fit_kind}', ha='left', va='top', transform=ax.transAxes)
-    fig.savefig(f'{figs_prefix}/compare_all_e2_sigma_x_fit_{fit_kind}.pdf')
+    ax.text(
+        0.02, 0.98, f'Fit kind: {fit_kind}', ha='left', va='top',
+        transform=ax.transAxes)
+    fig.savefig(f'{figs_prefix}/compare_L{L}_e2_sigma_x_fit_{fit_kind}.pdf')
     plt.close(fig)
 
 def main3(e2, *, fit_kind):
@@ -370,13 +405,96 @@ def main3(e2, *, fit_kind):
     fig.savefig(f'{figs_prefix}/compare_e2_{e2:.1f}_sigma_x_all_x_fit_{fit_kind}.pdf')
     plt.close(fig)
 
+    
+def make_traces(e2s, windows, *, L, bias, binsize):
+    traces = []
+    for window_f in tqdm.tqdm(windows):
+        window = window_f(L)
+        print(f'{window=}')
+        trace = []
+        for e2 in e2s:
+            sigmas = []
+            for x in window:
+                for tag in ['cuda', 'v2']:
+                    try:
+                        res = load_data(
+                            L=L, e2=e2, x=x, tag=tag, binsize=binsize, bias=bias)
+                        sigmas.append(res['ratio'])
+                        break
+                    except FileNotFoundError as e:
+                        pass
+                else:
+                    print(f'Warning: Missing {L=} {e2=} {x=}')
+            sigmas = np.transpose(sigmas)
+            if len(sigmas) > 0:
+                window_sigma = (
+                    np.mean(sigmas[0]),
+                    # errors averaged in quadrature
+                    np.sqrt(np.sum(sigmas[1]**2))/len(sigmas[1]))
+                trace.append(window_sigma)
+            else:
+                trace.append((float('nan'), float('nan')))
+        trace = np.transpose(trace)
+        traces.append(trace)
+    return traces
+
+
+def main4():
+    """
+    Use window-avg sigma_eff to to build sigma vs e^2 curves.
+    """
+
+    e2s = np.concatenate([
+        [0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4],
+        [1.5, 2.0, 2.5, 3.0]
+    ])
+
+    binsize = 100
+    windows = [
+        lambda L: np.arange(21, 24+1),
+        lambda L: np.arange(33, 36+1),
+        lambda L: np.arange(45, 48+1),
+        lambda L: np.arange(61, 64+1),
+        lambda L: np.arange(93, 96+1)
+        # lambda L: np.arange(3*L//8-3, 3*L//8+1),
+        # lambda L: np.arange(L//2-3, L//2+1)
+    ]
+
+    window_styles = [
+        dict(label=r'$w=[21,24]$', color='tab:blue'),
+        dict(label=r'$w=[33,36]$', color='tab:red'),
+        dict(label=r'$w=[45,48]$', color='xkcd:emerald green'),
+        dict(label=r'$w=[61,64]$', color='xkcd:purple'),
+        dict(label=r'$w=[93,96]$', color='xkcd:orange')
+    ]
+
+    fig, ax = plt.subplots(1,1, figsize=(4,4), tight_layout=True)
+    style = dict(linestyle='', fillstyle='none', markersize=3, markeredgewidth=0.5, capsize=2)
+    for L, bias, marker in [
+            (64, 0.01, 'x'), (96, 0.01, 's'),
+            (128, 0.01, 'o'), (192, 0.01, '*')]:
+        traces = make_traces(e2s, windows, L=L, bias=bias, binsize=binsize)
+        for i, (trace, w_style) in enumerate(zip(traces, window_styles)):
+            off = 0.001*i
+            full_style = dict(style)
+            full_style.update(w_style)
+            full_style['label'] = rf'$L={L}$, {full_style["label"]}'
+            full_style['marker'] = marker
+            al.add_errorbar(trace, xs=e2s, ax=ax, off=off, **full_style)
+    ax.legend(ncol=2, fontsize=6)
+    ax.set_xlabel(r'$e^2$')
+    ax.set_ylabel(r'$\sigma$')
+    # ax.set_ylim(0, 0.020)
+    fig.savefig(f'{figs_prefix}/windowed_e2_vs_sigma.pdf')
+
 if __name__ == '__main__':
     os.makedirs(figs_prefix, exist_ok=True)
     os.makedirs(data_prefix, exist_ok=True)
     # main1()
-    main2(fit_kind='1exp')
+    # main2(fit_kind='1exp', L=128, tag='cuda')
     # main2(fit_kind='luscher')
     # main2(fit_kind='power')
     # for e2 in [0.6, 0.7, 0.8, 0.9, 1.0]:
     #     main3(e2, fit_kind='1exp')
     #     main3(e2, fit_kind='luscher')
+    main4()

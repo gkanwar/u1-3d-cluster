@@ -49,8 +49,9 @@ fi
 
 
 cd /space4/kanwar/quantum_link/u1/cpp_cluster
+# --L=${L}
+# ${STAG_FLAG}
 srun --ntasks-per-node=1 \
-    ./src/u1_3d_wloop --n_iter=${n_iter} --n_therm=${n_therm} --n_bin_meas=${n_bin_meas} \
-    --seed=${seed} --e2=${e2} --L=${L} --x=${x} --t=3 ${STAG_FLAG} \
-    --out_prefix=${out_dir}/dyn_wloop_v2_${STAG_TAG}_L${L}_${e2}_x${x} \
-    | tail -n10
+    ./src/u1_3d_wloop_L${L} --n_iter=${n_iter} --n_therm=${n_therm} --n_bin_meas=${n_bin_meas} \
+    --seed=${seed} --e2=${e2} --x=${x} --t=3 \
+    --out_prefix=${out_dir}/dyn_wloop_v2_${STAG_TAG}_L${L}_${e2}_x${x}

@@ -8,9 +8,11 @@ export n_skip_meas=1000
 ALL_E2=($(seq 0.6 0.1 1.4))
 ALL_E2+=($(seq 1.5 0.5 3.0))
 # ALL_X=($(seq 45 48))
-ALL_X=($(seq 61 64))
+# ALL_X=($(seq 61 64))
+ALL_X=($(seq 93 96))
 # ALL_SEED=($(seq 955191 956191))
-ALL_SEED=($(seq 43954 44954))
+# ALL_SEED=($(seq 43954 44954))
+ALL_SEED=($(seq 932917 942917))
 i=0
 for e2 in "${ALL_E2[@]}"; do
     for x in "${ALL_X[@]}"; do

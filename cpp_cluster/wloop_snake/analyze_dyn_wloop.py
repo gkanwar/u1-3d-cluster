@@ -1,3 +1,5 @@
+### Take W(r,t) data from dynamic wloop Snake runs and analyze in various ways.
+
 import analysis as al
 import itertools
 import matplotlib
@@ -16,7 +18,10 @@ import tqdm
 BIAS = 0.01
 raw_data_prefix = 'raw_obs'
 data_prefix = 'data'
+out_data_prefix = 'refined_obs'
 figs_prefix = 'figs'
+os.makedirs(out_data_prefix, exist_ok=True)
+os.makedirs(figs_prefix, exist_ok=True)
 
 def sigma_eff(Wt_hist_cfgs):
     Wt_hist = al.rmean(Wt_hist_cfgs)
@@ -26,7 +31,7 @@ def measure_log_ratio(Wt_hist_cfgs):
     Wt_hist = al.rmean(Wt_hist_cfgs)
     return np.log(Wt_hist[0]) - np.log(Wt_hist[-1])
 
-def load_data(L, e2, x, *, tag, bias=BIAS, binsize=100):
+def load_data(L, e2, x, *, tag, binsize, bias=BIAS):
     prefix = (
         f'{raw_data_prefix}_{tag}_bias{bias:.02f}/'
         f'dyn_wloop_{tag}_stag_L{L}_{e2:.1f}_x{x}' )
@@ -40,13 +45,17 @@ def load_data(L, e2, x, *, tag, bias=BIAS, binsize=100):
     ratio = (ratio[0]/L, ratio[1]/L)
     MC_hist = np.fromfile(f'{prefix}_MC.dat')
     xs_bin_MC, MC_hist_bin = al.bin_data(MC_hist, binsize=binsize)
+    jack_ratio = [
+        measure_log_ratio(np.roll(Wt_hist_bin, -i, axis=0)[1:])/L
+        for i in range(len(Wt_hist_bin))]
     return {
         'Wt': Wt_est,
         'sigma': sigma,
         'ratio': ratio,
-        'mcmc_trace_0': (xs_bin, Wt_hist_bin[:,0]),
-        'mcmc_trace_m1': (xs_bin, Wt_hist_bin[:,-1]),
-        'mcmc_trace_MC': (xs_bin_MC, MC_hist_bin)
+        # 'mcmc_trace_0': (xs_bin, Wt_hist_bin[:,0]),
+        # 'mcmc_trace_m1': (xs_bin, Wt_hist_bin[:,-1]),
+        'mcmc_trace_MC': (xs_bin_MC, MC_hist_bin),
+        'jack_trace_ratio': (xs_bin, jack_ratio)
     }
 
 def make_fitter(f, g, pnames, **extra_kwargs):
@@ -166,7 +175,7 @@ def main1():
     fig3.savefig(f'{figs_prefix}/compare_{e2:0.1f}_sigma_x.pdf')
 """
 
-def make_plots_for_e2_sweep(e2, *, L, xs, global_ax, fit_kind, tag='v2', **extra_style):
+def analyze_e2_data(e2, *, L, xs, global_ax, fit_kind, tag='v2', binsize=100, **extra_style):
     fig1, ax1 = plt.subplots(1,1, figsize=(6, 4))
     fig2, ax2 = plt.subplots(1,1)
     ncols3 = 4
@@ -176,7 +185,7 @@ def make_plots_for_e2_sweep(e2, *, L, xs, global_ax, fit_kind, tag='v2', **extra
             hspace=0.01, wspace=0.05
         ))
     style = dict(
-        markersize=2, capsize=3, fillstyle='none', linestyle='',
+        markersize=2, capsize=1.5, fillstyle='none', linestyle='',
         linewidth=0.5*paper_plt.pix_to_pt, elinewidth=0.5*paper_plt.pix_to_pt,
         **extra_style)
 
@@ -186,14 +195,15 @@ def make_plots_for_e2_sweep(e2, *, L, xs, global_ax, fit_kind, tag='v2', **extra
     colors = cmap(np.arange(len(xs))/len(xs))
     for i,(x,color) in tqdm.tqdm(list(enumerate(zip(xs, colors)))):
         try:
-            res = load_data(L=L, e2=e2, x=x, tag=tag)
+            res = load_data(L=L, e2=e2, x=x, tag=tag, binsize=binsize)
             ax3a, ax3b = axes3.flatten()[2*i:2*i+2]
-            ax3a.plot(*res['mcmc_trace_0'], linestyle='-', marker='', color='b')
-            ax3a.plot(*res['mcmc_trace_m1'], linestyle='-', marker='', color='r')
+            # ax3a.plot(*res['mcmc_trace_0'], linestyle='-', marker='', color='b')
+            # ax3a.plot(*res['mcmc_trace_m1'], linestyle='-', marker='', color='r')
+            ax3a.plot(*res['jack_trace_ratio'], linestyle='-', marker='', color='k')
             ax3b.plot(*res['mcmc_trace_MC'], linestyle='-', marker='', color='xkcd:forest green')
             ax3a.set_xticks([])
             ax3b.set_xticks([])
-            ax3a.set_yscale('log')
+            # ax3a.set_yscale('log')
             # ax3a.set_yticks([])
             ax3a.text(0.1, 0.9, f'$x={x}$', ha='left', va='top', transform=ax3a.transAxes)
             ratio = res['ratio']
@@ -215,9 +225,13 @@ def make_plots_for_e2_sweep(e2, *, L, xs, global_ax, fit_kind, tag='v2', **extra
         except FileNotFoundError:
             pass
     if len(trace_xs) == 0:
+        plt.close(fig1)
+        plt.close(fig2)
+        plt.close(fig3)
         return
     trace = np.transpose(trace)
     trace_xs = np.array(trace_xs)
+
     fit_min = max(8, np.min(trace_xs))
     fit_max = L//2
     fit_inds, = np.nonzero((trace_xs >= fit_min) & (trace_xs <= fit_max))
@@ -270,6 +284,8 @@ def make_plots_for_e2_sweep(e2, *, L, xs, global_ax, fit_kind, tag='v2', **extra
     plt.close(fig1)
     plt.close(fig2)
     plt.close(fig3)
+    return (trace_xs, trace)
+
 
 def make_plots_for_e2_integrated_E(
         e2, *, L, xmin, xmax, global_ax1, global_ax2, fit_kind, **extra_style):
@@ -368,17 +384,27 @@ def main2(*, fit_kind, L, tag):
         1.1: dict(color=cmap(0.6), marker='d'),
         1.2: dict(color=cmap(0.7), marker='p'),
         1.3: dict(color=cmap(0.9), marker='h'),
-        1.4: dict(color=cmap(1.0), marker='*')
+        1.4: dict(color=cmap(1.0), marker='*'),
+        1.5: dict(color='0.8', marker='.'),
+        2.0: dict(color='0.8', marker='.'),
+        2.5: dict(color='0.8', marker='.'),
+        3.0: dict(color='0.8', marker='.'),
     }
-    xs = np.arange(0, L//2+1, 1)
+    xs = np.arange(0, L, 1)
     fig, ax = plt.subplots(1,1, figsize=(8,4))
     for e2,style in e2_style.items():
-        make_plots_for_e2_sweep(
-            e2, L=L, xs=xs, global_ax=ax, fit_kind=fit_kind, tag=tag, **style)
+        trace = analyze_e2_data(
+            e2, L=L, xs=xs, global_ax=ax, fit_kind=fit_kind, tag=tag, binsize=100, **style)
+        if trace is None: continue
+        trace_xs, trace_ys = trace
+        np.savetxt(
+            f'{out_data_prefix}/dVr_{e2:0.1f}_L{L}.txt',
+            np.transpose(np.concatenate((trace_xs[np.newaxis], trace_ys), axis=0)),
+            fmt=['%d', '%.18e', '%.18e'])
     ax.set_xlabel(r'$r$')
-    ax.set_xlim(24, L//2+4)
-    ax.set_ylim(0, 0.01)
-    ax.legend(ncol=2)
+    # ax.set_xlim(50, L//2+20)
+    # ax.set_ylim(0, 0.01)
+    ax.legend(ncol=2, fontsize=6)
     ax.text(
         0.02, 0.98, f'Fit kind: {fit_kind}', ha='left', va='top',
         transform=ax.transAxes)
@@ -469,21 +495,29 @@ def main4():
     ]
 
     fig, ax = plt.subplots(1,1, figsize=(4,4), tight_layout=True)
-    style = dict(linestyle='', fillstyle='none', markersize=3, markeredgewidth=0.5, capsize=2)
+    style = dict(
+        linestyle='-', fillstyle='none', markersize=3,
+        markeredgewidth=0.5, capsize=2)
+    all_traces = []
     for L, bias, marker in [
             (64, 0.01, 'x'), (96, 0.01, 's'),
             (128, 0.01, 'o'), (192, 0.01, '*')]:
         traces = make_traces(e2s, windows, L=L, bias=bias, binsize=binsize)
-        for i, (trace, w_style) in enumerate(zip(traces, window_styles)):
-            off = 0.001*i
+        for i, (trace, w_style, window) in enumerate(zip(traces, window_styles, windows)):
+            if not np.any(np.isfinite(trace[0])): continue
             full_style = dict(style)
             full_style.update(w_style)
             full_style['label'] = rf'$L={L}$, {full_style["label"]}'
             full_style['marker'] = marker
-            al.add_errorbar(trace, xs=e2s, ax=ax, off=off, **full_style)
+            all_traces.append((window, L, e2s, trace, full_style))
+    all_traces.sort(key=lambda x: (id(x[0]), x[1]))
+    for i, (_, _, xs, trace, full_style) in enumerate(all_traces):
+        off = i*0.001
+        al.add_errorbar(trace, xs=xs, ax=ax, off=off, **full_style)
     ax.legend(ncol=2, fontsize=6)
     ax.set_xlabel(r'$e^2$')
     ax.set_ylabel(r'$\sigma$')
+    ax.set_yscale('log')
     # ax.set_ylim(0, 0.020)
     fig.savefig(f'{figs_prefix}/windowed_e2_vs_sigma.pdf')
 
@@ -491,10 +525,14 @@ if __name__ == '__main__':
     os.makedirs(figs_prefix, exist_ok=True)
     os.makedirs(data_prefix, exist_ok=True)
     # main1()
-    # main2(fit_kind='1exp', L=128, tag='cuda')
+    # for L in [64, 96, 128, 192]:
+    for L in [128]:
+        # main2(fit_kind='1exp', L=L, tag='v2')
+        main2(fit_kind='1exp', L=L, tag='cuda')
+    # main2(fit_kind='1exp', L=192, tag='cuda')
     # main2(fit_kind='luscher')
     # main2(fit_kind='power')
     # for e2 in [0.6, 0.7, 0.8, 0.9, 1.0]:
     #     main3(e2, fit_kind='1exp')
     #     main3(e2, fit_kind='luscher')
-    main4()
+    # main4()

@@ -39,7 +39,7 @@ constexpr bool cper = false;
 #ifdef STAG
 constexpr bool stag = true;
 #else
-constexpr bool staggered = false;
+constexpr bool stag = false;
 #endif
 #if(ND == 3)
 constexpr latt_shape _shape{

@@ -20,6 +20,15 @@ inline double sum_array(const double* arr, unsigned n) {
   return tot;
 }
 
+inline std::string int_to_fname_str(int n) {
+  if (n >= 0) {
+    return std::to_string(n);
+  }
+  else {
+    return "m" + std::to_string(-n);
+  }
+}
+
 template <typename T>
 void write_array_to_file(const std::vector<T>& arr, std::ostream &os) {
   for (T val : arr) {

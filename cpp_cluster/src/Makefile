@@ -1,5 +1,7 @@
 all: build
 
+LATT_SIZE ?= 64
+
 CXX := g++
 AR := ar
 # CCFLAGS := -DNDEBUG -std=c++17 -Wall -Wextra -march=native -Ofast -flto

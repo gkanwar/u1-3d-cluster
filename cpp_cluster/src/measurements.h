@@ -92,6 +92,34 @@ inline std::vector<cdouble> measure_Ch_mom(
   return Ch_mom;
 }
 
+inline void measure_Ch_all_mom(
+    const cfg_t* cfg, const std::vector<wavevector>& wavevectors,
+    const latt_shape* shape, std::vector<std::vector<cdouble>>& Ch_mom) {
+  assert(wavevectors.size() == Ch_mom.size());
+  #ifndef NDEBUG
+  for (const auto& Ch_mom_n : Ch_mom) {
+    assert((int)Ch_mom_n.size() == shape->dims[ND-1]);
+  }
+  #endif
+  std::vector<cdouble> exp_factors(wavevectors.size());
+  for (int x = 0; x < shape->vol; x += shape->blocks[ND-1]) {
+    for (unsigned j = 0; j < wavevectors.size(); ++j) {
+      const auto& wv = wavevectors[j];
+      double px = 0.0;
+      for (int i = 0; i < ND-1; ++i) {
+        const double pi = 2.0 * PI * wv.p[i] / shape->dims[i];
+        px += compute_comp(x, i, shape) * pi;
+      }
+      exp_factors[j] = std::exp(1i * px);
+    }
+    for (unsigned j = 0; j < wavevectors.size(); ++j) {
+      for (int t = 0; t < shape->dims[ND-1]; ++t) {
+        Ch_mom[j][t] += exp_factors[j] * ((double)cfg[x + t]);
+      }
+    }
+  }
+}
+
 inline double compute_Ox(const cfg_t* cfg, int x, const latt_shape* shape) {
   const double h = cfg[x];
   const auto [x1, sx1] = shift_site_idx(x, 1, 0, shape);

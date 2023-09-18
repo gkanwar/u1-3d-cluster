@@ -28,20 +28,54 @@ def measure_log_ratio(Wt_hist_cfgs):
     Wt_hist = al.rmean(Wt_hist_cfgs)
     return np.log(Wt_hist[0]) - np.log(Wt_hist[-1])
 
-def load_data(L, e2, x, *, tag, tag2, binsize, bias=BIAS, n_therm=0):
+def load_data_multiple(L, e2, x, *, tag, tag2, bias, n_therm):
+    r = 1
+    all_Wt_hist = []
+    all_MC_hist = []
+    while True:
+        prefix = (
+            f'{raw_data_prefix}_{tag}_bias{bias:.02f}_{tag2}/'
+            f'dyn_wloop_{tag}_stag_r{r}_L{L}_{e2:.2f}_x{x}' )
+        print(f'{prefix=}')
+        try:
+            Wt_hist = np.fromfile(f'{prefix}_Wt_hist.dat')
+            MC_hist = np.fromfile(f'{prefix}_MC.dat')
+        except FileNotFoundError:
+            break
+        Wt_hist = Wt_hist.reshape(-1, L+1)
+        Wt_hist *= np.exp(-bias*np.arange(L+1))
+        Wt_hist = Wt_hist[n_therm:]
+        MC_hist = MC_hist[n_therm:]
+        all_Wt_hist.append(Wt_hist)
+        all_MC_hist.append(MC_hist)
+        r += 1
+    assert len(all_Wt_hist) == len(all_MC_hist)
+    if len(all_Wt_hist) == 0:
+        return None, None
+    return (
+        np.concatenate(all_Wt_hist, axis=0),
+        np.concatenate(all_MC_hist, axis=0)
+    )
+
+
+def load_data_single(L, e2, x, *, tag, tag2, bias, n_therm):
     prefix = (
         f'{raw_data_prefix}_{tag}_bias{bias:.02f}_{tag2}/'
         f'dyn_wloop_{tag}_stag_L{L}_{e2:.2f}_x{x}' )
     print(f'{prefix=}')
-    # load
     Wt_hist = np.fromfile(f'{prefix}_Wt_hist.dat')
     Wt_hist = Wt_hist.reshape(-1, L+1)
     Wt_hist *= np.exp(-bias*np.arange(L+1))
     MC_hist = np.fromfile(f'{prefix}_MC.dat')
-    # trim
     Wt_hist = Wt_hist[n_therm:]
     MC_hist = MC_hist[n_therm:]
-    # analyze
+    return Wt_hist, MC_hist
+
+def load_and_analyze_data(L, e2, x, *, binsize, **kwargs):
+    Wt_hist, MC_hist = load_data_multiple(L, e2, x, **kwargs)
+    if Wt_hist is None or MC_hist is None:
+        Wt_hist, MC_hist = load_data_single(L, e2, x, **kwargs)
+
     xs_bin, Wt_hist_bin = al.bin_data(Wt_hist, binsize=binsize)
     Wt_est = al.bootstrap(Wt_hist_bin, Nboot=100, f=al.rmean)
     ratio = al.bootstrap(Wt_hist_bin, Nboot=1000, f=measure_log_ratio)
@@ -53,15 +87,16 @@ def load_data(L, e2, x, *, tag, tag2, binsize, bias=BIAS, n_therm=0):
     return {
         'Wt': Wt_est,
         'ratio': ratio,
-        # 'mcmc_trace_0': (xs_bin, Wt_hist_bin[:,0]),
-        # 'mcmc_trace_m1': (xs_bin, Wt_hist_bin[:,-1]),
+        'mcmc_trace_0': (xs_bin, Wt_hist_bin[:,0]),
+        'mcmc_trace_m1': (xs_bin, Wt_hist_bin[:,-1]),
         'mcmc_trace_MC': (xs_bin_MC, MC_hist_bin),
         'jack_trace_ratio': (xs_bin, jack_ratio)
     }
+    
 
 n_therm_by_L = {
-    192: 2000,
-    256: 4000,
+    192: 500,
+    256: 500,
 }
     
 def load_windows(e2, windows, *, L, bias, ML, binsize):
@@ -71,7 +106,12 @@ def load_windows(e2, windows, *, L, bias, ML, binsize):
     fig, axes = plt.subplots(
         2,1, figsize=(6,3), tight_layout=True,
         gridspec_kw=dict(height_ratios=[0.1,0.9], hspace=0))
+    fig2, axes2 = plt.subplots(
+        2,1, figsize=(6,3), tight_layout=True,
+        gridspec_kw=dict(height_ratios=[0.1,0.9], hspace=0))
+    
     leg_ax, ax = axes
+    leg_ax2, ax2 = axes2
     for window_f in tqdm.tqdm(windows):
         window = window_f(L)
         print(f'{window=}')
@@ -79,11 +119,12 @@ def load_windows(e2, windows, *, L, bias, ML, binsize):
         for x in window:
             try:
                 n_therm = n_therm_by_L.get(L, 0)
-                res = load_data(
+                res = load_and_analyze_data(
                     L=L, e2=e2, x=x, tag=tag, tag2=tag2, binsize=binsize,
                     bias=bias, n_therm=n_therm)
                 sigmas.append(res['ratio'])
                 ax.plot(*res['mcmc_trace_MC'], label=f'$x={x}$')
+                ax2.plot(*res['mcmc_trace_0'], label=f'$x={x}$')
             except FileNotFoundError as e:
                 print(f'Warning: Missing {L=} {e2=} {x=}')
         sigmas = np.transpose(sigmas)
@@ -96,8 +137,17 @@ def load_windows(e2, windows, *, L, bias, ML, binsize):
         else:
             traces.append((float('nan'), float('nan')))
     leg_ax.axis('off')
-    leg_ax.legend(*ax.get_legend_handles_labels(), ncol=4, loc='upper center', bbox_to_anchor=(0.5, 1.0))
+    leg_ax.legend(
+        *ax.get_legend_handles_labels(), ncol=4, loc='upper center',
+         bbox_to_anchor=(0.5, 1.0))
+    leg_ax2.axis('off')
+    leg_ax2.legend(
+        *ax2.get_legend_handles_labels(), ncol=4, loc='upper center',
+         bbox_to_anchor=(0.5, 1.0))
     fig.savefig(f'{figs_prefix}/mcmc_MC_L{L}_{e2:0.2f}.pdf')
+    fig2.savefig(f'{figs_prefix}/mcmc_Wt_L{L}_{e2:0.2f}.pdf')
+    plt.close(fig)
+    plt.close(fig2)
     return np.array(traces)
 
 
@@ -134,14 +184,15 @@ def main():
         full_style = dict(marker=marker, color=color, **style)
         traces_sigma = []
         traces_sigma_over_m2 = []
+        xs = []
         for L, e2 in zip(Ls, e2s):
             trace = load_windows(e2, windows, L=L, bias=BIAS, ML=ML, binsize=binsize)
             traces_sigma.append(trace)
             # traces_sigma_over_m2.append(L**2 * trace / ML**2)
             traces_sigma_over_m2.append(L * trace / (ML*e2))
+            xs.append(e2)
         traces_sigma = np.transpose(traces_sigma, axes=(1,2,0))
         traces_sigma_over_m2 = np.transpose(traces_sigma_over_m2, axes=(1,2,0))
-        xs = e2s
         for i, (t_sigma, t_sigma_over_m2, window, wlabel) in enumerate(
                 zip(traces_sigma, traces_sigma_over_m2, windows, window_labels)):
             off = i*0.001

@@ -1,8 +1,11 @@
 ### Take V'(r) data from analyze_dyn_wloop and extract string tension estimates.
 
 import analysis as al
+import copy
 import itertools
 import matplotlib
+import matplotlib.container as mcontainer
+import matplotlib.lines as mlines
 import matplotlib.pyplot as plt
 import matplotlib.transforms as mtransforms
 import matplotlib.style as mstyle
@@ -99,8 +102,8 @@ def ratio_with_errs(est_x, est_y):
 
 def plot_sigma_vs_e2():
 
-    fig, ax = plt.subplots(1,1, figsize=(3.75,3.0), tight_layout=True)
-    fig2, ax2 = plt.subplots(1,1, figsize=(3.75,3.0), tight_layout=True)
+    fig, ax = plt.subplots(1,1, figsize=(3.5,2.75), tight_layout=True)
+    fig2, ax2 = plt.subplots(1,1, figsize=(3.5,2.75), tight_layout=True)
 
     # Alessandro's masses
     masses = np.load(
@@ -110,7 +113,7 @@ def plot_sigma_vs_e2():
     # Tej's window Snake data
     e2s = np.concatenate([
         [0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4],
-        [1.5, 2.0, 2.5, 3.0]
+        [1.5, 2.0] #, 2.5, 3.0]
     ])
     windows = [
         np.arange(21, 24+1),
@@ -119,21 +122,26 @@ def plot_sigma_vs_e2():
         np.arange(61, 64+1),
         np.arange(93, 96+1)
     ]
-    # cmap = plt.get_cmap('tab20c', 20)
     window_styles = [
-        dict(label=r'$w=[21,24]$', color='#f6e0b5'),
-        dict(label=r'$w=[33,36]$', color='#eea990'),
-        dict(label=r'$w=[45,48]$', color='#aa6f73'),
-        dict(label=r'$w=[61,64]$', color='#a39193'),
-        dict(label=r'$w=[93,96]$', color='#66545e')
+        dict(label=r'$w=[21,24]$'), # color='#f6e0b5'),
+        dict(label=r'$w=[33,36]$'), # color='#eea990'),
+        dict(label=r'$w=[45,48]$'), # color='#aa6f73'),
+        dict(label=r'$w=[61,64]$'), # color='#a39193'),
+        dict(label=r'$w=[93,96]$'), # color='#66545e')
     ]
     style = dict(
-        linestyle='-', fillstyle='none', markersize=3,
-        markeredgewidth=0.5, capsize=2)
+        linestyle='-', fillstyle='none', markersize=4, capsize=2)
     all_traces_sigma = []
     all_traces_sigma_over_m2 = []
-    for L, marker in [
-            (64, 'x'), (96, 's'), (128, 'o'), (192, '*')]:
+    cmap = plt.get_cmap('cividis_r')
+    Lbase = 64
+    Lnorm = 256 - Lbase
+    Ls_with_styles = [
+        (64, dict(marker='v', color=cmap((64 - Lbase)/Lnorm))),
+        (96, dict(marker='o', color=cmap((96 - Lbase)/Lnorm))),
+        (128, dict(marker='p', color=cmap((128 - Lbase)/Lnorm))),
+        (192, dict(marker='h', color=cmap((192 - Lbase)/Lnorm))) ]
+    for L, L_style in Ls_with_styles:
         mass_e2s, mass_mean, mass_err = masses[L]
         traces_sigma = []
         traces_sigma_over_m2 = []
@@ -156,10 +164,12 @@ def plot_sigma_vs_e2():
         for i, (t_sigma, t_sigma_over_m2, w_style, window) in enumerate(
                 zip(traces_sigma, traces_sigma_over_m2, window_styles, windows)):
             if not np.any(np.isfinite(t_sigma[0])): continue
+            # L/2 window ONLY
+            if not abs(window[-1]/L - 0.5) < 0.1: continue
             full_style = dict(style)
             full_style.update(w_style)
-            full_style['label'] = rf'$L={L}$, {full_style["label"]}'
-            full_style['marker'] = marker
+            full_style.update(L_style)
+            full_style['label'] = rf'$L={L}$' # {full_style["label"]}
             all_traces_sigma.append(
                 (i, L, e2s, t_sigma, full_style))
             all_traces_sigma_over_m2.append(
@@ -174,49 +184,58 @@ def plot_sigma_vs_e2():
         al.add_errorbar(trace, xs=xs, ax=ax2, off=off, **full_style)
 
     # Alessandro's <H> data
-    e2s = np.loadtxt(f'{ale_data_prefix}/stag_string_tension/couplings.txt')
-    ale_style = dict(
-        color='xkcd:royal blue', linestyle='-', fillstyle='none', capsize=2, markersize=3,
-        markeredgewidth=0.5, alpha=0.8)
-    for L, marker in [(64, 'x'), (96, 's')]:
-        ys = np.loadtxt(f'{ale_data_prefix}/stag_string_tension/sigmaval{L}.txt')
-        yerrs = np.loadtxt(f'{ale_data_prefix}/stag_string_tension/sigmaerr{L}.txt')
-        style = dict(marker=marker, **ale_style)
-        al.add_errorbar(
-            (ys, yerrs), xs=e2s, ax=ax, **style,
-            label=rf'$L = {L}$, $\langle H \rangle$, fit $\sigma$')
-        mass_e2s, mass_mean, mass_err = masses[L]
-        # assert np.all(np.sum(np.isclose(mass_e2s, e2)) > 0 for e2 in e2s)
-        ratio_ests = []
-        ratio_e2s = []
-        for e2,y,yerr in zip(e2s, ys, yerrs):
-            ind = np.where(np.isclose(mass_e2s, e2))[0]
-            if len(ind) == 0: continue
-            if e2 < 1.05: continue
-            ind = ind[0]
-            mass_est = (mass_mean[ind]**2, 2*mass_mean[ind]*mass_err[ind])            
-            ratio_e2s.append(e2)
-            ratio_ests.append(ratio_with_errs((y,yerr), mass_est))
-        ratio_ests = np.transpose(ratio_ests)
-        al.add_errorbar(
-            ratio_ests, xs=ratio_e2s, ax=ax2, **style,
-            label=rf'$L = {L}$, $\langle H \rangle$, fit $\sigma$')
+    # e2s = np.loadtxt(f'{ale_data_prefix}/stag_string_tension/couplings.txt')
+    # ale_style = dict(
+    #     color='xkcd:royal blue', linestyle='-', fillstyle='none', capsize=2, markersize=3,
+    #     markeredgewidth=0.5, alpha=0.8)
+    # for L, marker in [(64, 'x'), (96, 's')]:
+    #     ys = np.loadtxt(f'{ale_data_prefix}/stag_string_tension/sigmaval{L}.txt')
+    #     yerrs = np.loadtxt(f'{ale_data_prefix}/stag_string_tension/sigmaerr{L}.txt')
+    #     style = dict(marker=marker, **ale_style)
+    #     al.add_errorbar(
+    #         (ys, yerrs), xs=e2s, ax=ax, **style,
+    #         label=rf'$L = {L}$, $\langle H \rangle$, fit $\sigma$')
+    #     mass_e2s, mass_mean, mass_err = masses[L]
+    #     # assert np.all(np.sum(np.isclose(mass_e2s, e2)) > 0 for e2 in e2s)
+    #     ratio_ests = []
+    #     ratio_e2s = []
+    #     for e2,y,yerr in zip(e2s, ys, yerrs):
+    #         ind = np.where(np.isclose(mass_e2s, e2))[0]
+    #         if len(ind) == 0: continue
+    #         if e2 < 1.05: continue
+    #         ind = ind[0]
+    #         mass_est = (mass_mean[ind]**2, 2*mass_mean[ind]*mass_err[ind])            
+    #         ratio_e2s.append(e2)
+    #         ratio_ests.append(ratio_with_errs((y,yerr), mass_est))
+    #     ratio_ests = np.transpose(ratio_ests)
+    #     al.add_errorbar(
+    #         ratio_ests, xs=ratio_e2s, ax=ax2, **style,
+    #         label=rf'$L = {L}$, $\langle H \rangle$, fit $\sigma$')
 
 
-    ax.legend(ncol=2, fontsize=6)
+    handles, labels = ax.get_legend_handles_labels()
+    for i in range(len(handles)):
+        lines = handles[i].lines
+        line = mlines.Line2D([], [])
+        line.update_from(lines[0])
+        line.set_linestyle('')
+        lines = (line, lines[1], lines[2])
+        handles[i] = mcontainer.ErrorbarContainer(lines)
+    ax.legend(handles, labels, ncol=1, loc='upper left')#fontsize=6)
     ax.set_xlabel(r'$e^2$')
-    ax.set_ylabel(r'$a^2 \sigma$', rotation=0)
-    ax.set_ylim(3e-4, 5e-2)
-    ax.set_yscale('log')
+    ax.set_ylabel(r'$\sigma$')
+    ax.set_xticks([0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0])
+    ax.set_xlim(0.44, 2.07)
+    ax.set_ylim(0.0, 3e-2)
+    # ax.set_ylim(3e-4, 5e-2)
+    # ax.set_yscale('log')
     fig.savefig(f'{figs_prefix}/windowed_e2_vs_sigma.pdf')
 
-    ax2.legend(ncol=2, fontsize=6)
-    ax2.set_xlabel(r'$e^2$')
-    ax2.set_ylabel(r'$\sigma / m^2$', rotation=0)
-    ax2.set_ylim(0, 8.5)
-    # ax2.set_ylim(3e-4, 5e-2)
-    # ax2.set_yscale('log')
-    fig2.savefig(f'{figs_prefix}/windowed_e2_vs_sigma_over_m2.pdf')
+    # ax2.legend(ncol=2, fontsize=6)
+    # ax2.set_xlabel(r'$e^2$')
+    # ax2.set_ylabel(r'$\sigma / m^2$', rotation=0)
+    # ax2.set_ylim(0, 8.5)
+    # fig2.savefig(f'{figs_prefix}/windowed_e2_vs_sigma_over_m2.pdf')
 
 def main():
     # plot_sigma_eff(f'{figs_prefix}/combined_sigma_eff.pdf')

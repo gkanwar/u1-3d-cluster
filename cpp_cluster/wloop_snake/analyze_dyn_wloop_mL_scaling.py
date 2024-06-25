@@ -10,8 +10,8 @@ import matplotlib.style as mstyle
 import numpy as np
 import os
 import paper_plt
-# paper_plt.load_latex_config()
-paper_plt.load_basic_config()
+paper_plt.load_latex_config()
+# paper_plt.load_basic_config()
 import scipy as sp
 import scipy.optimize
 import tqdm
@@ -169,9 +169,13 @@ def main():
     window_labels = [
         '$w=5/8L$'
     ]
+    # internal plot
     fig, axes = plt.subplots(
         2,1, figsize=(4,4), tight_layout=True,
         sharex=True, gridspec_kw=dict(hspace=0))
+    # PRD plot
+    fig_prd, ax_prd = plt.subplots(
+        1,1, figsize=(3.5,2.25), tight_layout=True)
     style = dict(
         fillstyle='none', markersize=3, markeredgewidth=0.5, capsize=1.5,
         linestyle='')
@@ -196,12 +200,17 @@ def main():
         for i, (t_sigma, t_sigma_over_m2, window, wlabel) in enumerate(
                 zip(traces_sigma, traces_sigma_over_m2, windows, window_labels)):
             off = i*0.001
+            # internal plot
             al.add_errorbar(
                 t_sigma, xs=xs, ax=axes[0], off=off, **full_style,
                 label=f'ML={ML} {wlabel}')
             al.add_errorbar(
                 t_sigma_over_m2, xs=xs, ax=axes[1], off=off, **full_style,
                 label=f'ML={ML} {wlabel}')
+            # PRD plot
+            al.add_errorbar(
+                t_sigma_over_m2, xs=xs, ax=ax_prd, off=off, **full_style,
+                label=f'$mL={ML}$')
 
     for ax in axes:
         ax.legend()
@@ -211,6 +220,10 @@ def main():
     axes[1].set_ylabel(r'$\sigma/m e^2$')
     # ax.set_ylim(0, 0.020)
     fig.savefig(f'{figs_prefix}/windowed_e2_vs_sigma_mLALL.pdf')
+    ax_prd.legend()
+    ax_prd.set_xlabel(r'$e^2$')
+    ax_prd.set_ylabel(r'$\sigma / m e^2$')
+    fig_prd.savefig(f'{figs_prefix}/windowed_e2_vs_sigma_mL_prd.pdf')
 
 if __name__ == '__main__':
     os.makedirs(figs_prefix, exist_ok=True)

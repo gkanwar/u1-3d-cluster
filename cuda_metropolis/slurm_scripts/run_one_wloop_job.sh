@@ -41,12 +41,16 @@ fi
 if [ -z "${out_dir+x}" ]; then
     out_dir="raw_obs_bias0.01"
 fi
+if [ -z "${tag+x}" ]; then
+    tag="stag"
+fi
 
 
 cd ${HOME}/u1_3d_cluster/cuda_metropolis
 mkdir -p ${out_dir}
 module load CUDA
 srun --ntasks-per-node=1 \
-    ./src/u1_3d_wloop_cuda --n_iter=${n_iter} --n_therm=${n_therm} --n_skip_meas=${n_skip_meas} \
+    ./src/u1_3d_wloop_cuda --n_iter=${n_iter} --n_therm=${n_therm} \
+    --n_skip_meas=${n_skip_meas} \
     --seed=${seed} --e2=${e2} --x=${x} --L=${L} \
-    --out_prefix=${out_dir}/dyn_wloop_cuda_stag_L${L}_${e2}_x${x}
+    --out_prefix=${out_dir}/dyn_wloop_cuda_${tag}_L${L}_${e2}_x${x}
